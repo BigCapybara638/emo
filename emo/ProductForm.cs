@@ -9,7 +9,8 @@ namespace emo
 {
     public partial class ProductForm : Form
     {
-        private int _productId, _userId;
+        private int _productId;
+        private int _userId;
         private Product _product;
 
         public ProductForm(Product product, int userId)
@@ -36,6 +37,7 @@ namespace emo
 
         private void LoadSizes()
         {
+            cmbSize.Items.Clear();
             using (var conn = new SqlConnection(DBHelper.connectionString))
             {
                 conn.Open();
@@ -51,11 +53,12 @@ namespace emo
                     {
                         while (reader.Read())
                         {
+                            int count = Convert.ToInt32(reader["count"]);
                             cmbSize.Items.Add(new ComboBoxItem
                             {
-                                Text = $"{reader["Размер"]} (осталось {reader["count"]})",
+                                Text = $"{reader["Размер"]} (осталось {count})",
                                 Value = Convert.ToInt32(reader["id"]),
-                                MaxCount = Convert.ToInt32(reader["count"])
+                                MaxCount = count
                             });
                         }
                     }
@@ -65,7 +68,7 @@ namespace emo
             if (cmbSize.Items.Count > 0)
             {
                 cmbSize.SelectedIndex = 0;
-                numCount.Maximum = 1000; // Разрешаем вводить много, чтобы потом выдать ошибку
+                numCount.Maximum = 1000; // Разрешаем вводить много, чтобы выдать ошибку
             }
             else
             {
@@ -94,22 +97,58 @@ namespace emo
                 {
                     conn.Open();
 
-                    // 1. Создаем заказ
-                    new SqlCommand($"INSERT INTO Orders_import$ ([Дата заказа], id_user) VALUES ('{DateTime.Now:yyyy-MM-dd HH:mm:ss}', {_userId})", conn).ExecuteNonQuery();
+                    // 1. Создаем заказ (дата и пользователь)
+                    string qOrder = @"INSERT INTO Orders_import$ ([Дата заказа], id_user) 
+                                      VALUES (@date, @user)";
+                    using (var cmd = new SqlCommand(qOrder, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@date", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@user", _userId);
+                        cmd.ExecuteNonQuery();
+                    }
 
-                    // 2. Получаем ID заказа и добавляем товар
-                    int orderId = Convert.ToInt32(new SqlCommand("SELECT MAX(id) FROM Orders_import$", conn).ExecuteScalar());
-                    new SqlCommand($"INSERT INTO Order_stock$ (id_order, id_stock_items, [Количество]) VALUES ({orderId}, {item.Value}, {count})", conn).ExecuteNonQuery();
+                    // 2. Получаем ID последнего заказа (даже если IDENTITY не настроен)
+                    int orderId = 0;
+                    string qGetId = "SELECT MAX(id) FROM Orders_import$";
+                    using (var cmd = new SqlCommand(qGetId, conn))
+                    {
+                        object result = cmd.ExecuteScalar();
+                        if (result != null && result != DBNull.Value)
+                            orderId = Convert.ToInt32(result);
+                    }
 
-                    // 3. Уменьшаем остаток
-                    new SqlCommand($"UPDATE Stock_items$ SET count = count - {count} WHERE id = {item.Value}", conn).ExecuteNonQuery();
+                    if (orderId == 0)
+                    {
+                        MessageBox.Show("Не удалось создать заказ (таблица Orders пуста или ошибка ID).");
+                        return;
+                    }
+
+                    // 3. Добавляем товар в заказ
+                    string qItem = @"INSERT INTO Order_stock$ (id_order, id_stock_items, [Количество]) 
+                                     VALUES (@order, @stock, @count)";
+                    using (var cmd = new SqlCommand(qItem, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@order", orderId);
+                        cmd.Parameters.AddWithValue("@stock", item.Value);
+                        cmd.Parameters.AddWithValue("@count", count);
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    // 4. Уменьшаем остаток на складе
+                    string qUpdate = @"UPDATE Stock_items$ SET count = count - @count WHERE id = @stock";
+                    using (var cmd = new SqlCommand(qUpdate, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@count", count);
+                        cmd.Parameters.AddWithValue("@stock", item.Value);
+                        cmd.ExecuteNonQuery();
+                    }
                 }
-                MessageBox.Show("Заказ оформлен!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Заказ успешно оформлен!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка: {ex.Message}");
+                MessageBox.Show($"Ошибка при оформлении: {ex.Message}\n\n{ex.StackTrace}");
             }
         }
     }
