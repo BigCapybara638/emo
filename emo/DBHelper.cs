@@ -7,7 +7,7 @@ namespace emo
 {
     public static class DBHelper
     {
-        private static string connectionString = "Server=localhost;Database=shoe_shop;Trusted_Connection=True;";
+        private static string connectionString = "Data Source=USERS\\SQLEXPRESS;Database=demo;Integrated Security=True;Persist Security Info=False;Pooling=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Application Name=\"SQL Server Management Studio\"";
 
         public static SqlConnection GetConnection()
         {
@@ -29,12 +29,12 @@ namespace emo
 
                 string query = @"
                     SELECT COUNT(*) 
-                    FROM Order_items oi
-                    JOIN Orders o ON oi.id_order = o.id
-                    JOIN Stock_items si ON oi.id_stock_item = si.id
-                    WHERE si.id_product = @pid 
-                      AND o.order_date >= @start 
-                      AND o.order_date <= @end";
+                    FROM Order_stock$ os
+                    JOIN Orders_import$ o ON os.id_order = o.id
+                    JOIN Stock_items$ si ON os.id_stock_items = si.id
+                    WHERE si.id_tovar = @pid 
+                      AND o.[Дата заказа] >= @start 
+                      AND o.[Дата заказа] <= @end";
 
                 using (var cmd = new SqlCommand(query, conn))
                 {
@@ -58,34 +58,36 @@ namespace emo
             {
                 conn.Open();
                 string query = @"
-                    SELECT 
-                        p.id, 
-                        p.image, 
-                        c.category, 
-                        p.name, 
-                        m.manufacture, 
-                        p.composition, 
-                        p.price,
-                        COALESCE(SUM(si.count), 0) AS total_count
-                    FROM Products p
-                    LEFT JOIN Categories c ON p.id_category = c.id
-                    LEFT JOIN Manufactures m ON p.id_manufacture = m.id
-                    LEFT JOIN Stock_items si ON p.id = si.id_product
-                    GROUP BY p.id, p.image, c.category, p.name, m.manufacture, p.composition, p.price";
+            SELECT 
+                p.id, 
+                p.[Изображение], 
+                c.[Категория], 
+                p.[Наименование товара], 
+                m.[Производство], 
+                p.[Состав], 
+                p.[Цена],
+                COALESCE(SUM(si.count), 0) AS total_count
+            FROM Products$ p
+            LEFT JOIN Categories$ c ON p.id_category = c.id
+            LEFT JOIN Manufactures$ m ON p.id_manufactures = m.id
+            LEFT JOIN Stock_items$ si ON p.id = si.id_tovar
+            GROUP BY p.id, p.[Изображение], c.[Категория], p.[Наименование товара], m.[Производство], p.[Состав], p.[Цена]";
 
                 using (var cmd = new SqlCommand(query, conn))
                 using (var reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
                     {
-                        int id = reader.GetInt32(0);
-                        string image = reader.IsDBNull(1) ? "" : reader.GetString(1);
-                        string category = reader.IsDBNull(2) ? "" : reader.GetString(2);
-                        string name = reader.GetString(3);
-                        string manufacture = reader.IsDBNull(4) ? "" : reader.GetString(4);
-                        string composition = reader.IsDBNull(5) ? "" : reader.GetString(5);
-                        decimal basePrice = reader.GetDecimal(6);
-                        int totalCount = Convert.ToInt32(reader.GetInt64(7));
+                        int id = Convert.ToInt32(reader["id"]);
+                        string image = reader["Изображение"] == DBNull.Value ? "" : reader["Изображение"].ToString();
+                        string category = reader["Категория"] == DBNull.Value ? "" : reader["Категория"].ToString();
+                        string name = reader["Наименование товара"] == DBNull.Value ? "" : reader["Наименование товара"].ToString();
+                        string manufacture = reader["Производство"] == DBNull.Value ? "" : reader["Производство"].ToString();
+                        string composition = reader["Состав"] == DBNull.Value ? "" : reader["Состав"].ToString();
+                        // Цена может быть double/float в БД, поэтому Convert.ToDecimal
+                        decimal basePrice = Convert.ToDecimal(reader["Цена"]);
+                        // Количество из SUM может быть любым числовым типом
+                        int totalCount = Convert.ToInt32(reader["total_count"]);
 
                         list.Add(new Product
                         {
@@ -104,20 +106,21 @@ namespace emo
             }
             return list;
         }
-    }
 
-    // Модель товара (не меняется)
-    public class Product
-    {
-        public int Id { get; set; }
-        public string Image { get; set; }
-        public string Category { get; set; }
-        public string Name { get; set; }
-        public string Manufacture { get; set; }
-        public string Composition { get; set; }
-        public decimal BasePrice { get; set; }
-        public decimal Price { get; set; }
-        public int TotalCount { get; set; }
-        public string CountText => TotalCount > 5 ? "много" : "мало";
+
+        // Модель товара (не меняется)
+        public class Product
+        {
+            public int Id { get; set; }
+            public string Image { get; set; }
+            public string Category { get; set; }
+            public string Name { get; set; }
+            public string Manufacture { get; set; }
+            public string Composition { get; set; }
+            public decimal BasePrice { get; set; }
+            public decimal Price { get; set; }
+            public int TotalCount { get; set; }
+            public string CountText => TotalCount > 5 ? "много" : "мало";
+        }
     }
 }
