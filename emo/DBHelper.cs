@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient; // Для MS SQL Server
+using System.Data.SqlClient;
 
 namespace emo
 {
     public static class DBHelper
     {
-        private static string connectionString = "Data Source=USERS\\SQLEXPRESS;Database=demo;Integrated Security=True;Persist Security Info=False;Pooling=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Application Name=\"SQL Server Management Studio\"";
+        public static string connectionString = "Data Source=USERS\\SQLEXPRESS;Database=demo;Integrated Security=True;Persist Security Info=False;Pooling=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Application Name=\"SQL Server Management Studio\"";
 
         public static SqlConnection GetConnection()
         {
@@ -107,8 +107,46 @@ namespace emo
             return list;
         }
 
+        public static UserInfo GetUserByLogin(string login)
+        {
+            using (var conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+                string q = @"SELECT u.id, u.[Фамилия], u.[Имя], u.[Отчество], u.id_role 
+                     FROM Users$ u 
+                     WHERE u.[Логин] = @login";
+                using (var cmd = new SqlCommand(q, conn))
+                {
+                    cmd.Parameters.AddWithValue("@login", login);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return new UserInfo
+                            {
+                                Id = Convert.ToInt32(reader["id"]),
+                                LastName = reader["Фамилия"].ToString(),
+                                FirstName = reader["Имя"].ToString(),
+                                MiddleName = reader["Отчество"]?.ToString() ?? "",
+                                RoleId = Convert.ToInt32(reader["id_role"])
+                            };
+                        }
+                    }
+                }
+            }
+            return null;
+        }
 
-        // Модель товара (не меняется)
+        // Класс для хранения данных пользователя
+        public class UserInfo
+        {
+            public int Id { get; set; }
+            public string LastName { get; set; }
+            public string FirstName { get; set; }
+            public string MiddleName { get; set; }
+            public int RoleId { get; set; }
+        }
+
         public class Product
         {
             public int Id { get; set; }
