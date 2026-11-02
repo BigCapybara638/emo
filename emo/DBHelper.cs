@@ -14,6 +14,8 @@ namespace emo
             return new SqlConnection(connectionString);
         }
 
+        // hui
+
         // Алгоритм расчёта цены со скидкой 25%
         public static decimal GetPriceWithDiscount(int productId, decimal basePrice)
         {
