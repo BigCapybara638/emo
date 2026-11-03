@@ -147,18 +147,19 @@ namespace emo
             public int RoleId { get; set; }
         }
 
-        public class Product
-        {
-            public int Id { get; set; }
-            public string Image { get; set; }
-            public string Category { get; set; }
-            public string Name { get; set; }
-            public string Manufacture { get; set; }
-            public string Composition { get; set; }
-            public decimal BasePrice { get; set; }
-            public decimal Price { get; set; }
-            public int TotalCount { get; set; }
-            public string CountText => TotalCount > 5 ? "много" : "мало";
-        }
+        
+    }
+    public class Product
+    {
+        public int Id { get; set; }
+        public string Image { get; set; }
+        public string Category { get; set; }
+        public string Name { get; set; }
+        public string Manufacture { get; set; }
+        public string Composition { get; set; }
+        public decimal BasePrice { get; set; }
+        public decimal Price { get; set; }
+        public int TotalCount { get; set; }
+        public string CountText => TotalCount > 5 ? "много" : "мало";
     }
 }

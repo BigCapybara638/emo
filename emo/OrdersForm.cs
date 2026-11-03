@@ -53,33 +53,33 @@ namespace emo
         private void btnDeleteOrder_Click(object sender, EventArgs e)
         {
             if (dgvOrders.SelectedRows.Count == 0) return;
+            int orderId = Convert.ToInt32(dgvOrders.SelectedRows[0].Cells["id"].Value);
 
-            // Безопасно получаем id
-            object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
-            if (idObj == null || idObj == DBNull.Value)
-            {
-                MessageBox.Show("У выбранного заказа отсутствует ID. Удаление невозможно.", "Ошибка");
-                return;
-            }
-            int orderId = Convert.ToInt32(idObj);
-
-            if (MessageBox.Show("Удалить заказ?", "Подтверждение", MessageBoxButtons.YesNo) == DialogResult.Yes)
+            if (MessageBox.Show("Удалить заказ? Товары вернутся на склад.", "Подтверждение", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 try
                 {
                     using (var conn = new SqlConnection(DBHelper.connectionString))
                     {
                         conn.Open();
-                        // Сначала удаляем состав заказа, потом сам заказ
+                        // 1. Возвращаем товары на склад
+                        string qReturn = @"UPDATE si SET si.count = si.count + os.[Количество]
+                                   FROM Stock_items$ si
+                                   JOIN Order_stock$ os ON si.id = os.id_stock_items
+                                   WHERE os.id_order = @id";
+                        using (var cmd = new SqlCommand(qReturn, conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", orderId);
+                            cmd.ExecuteNonQuery();
+                        }
+                        // 2. Удаляем состав и заказ
                         new SqlCommand($"DELETE FROM Order_stock$ WHERE id_order = {orderId}", conn).ExecuteNonQuery();
                         new SqlCommand($"DELETE FROM Orders_import$ WHERE id = {orderId}", conn).ExecuteNonQuery();
                     }
                     LoadOrders();
+                    MessageBox.Show("Заказ удален, товары возвращены на склад.", "Успех");
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Ошибка при удалении: {ex.Message}");
-                }
+                catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
             }
         }
 
