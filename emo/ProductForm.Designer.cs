@@ -12,6 +12,7 @@
         private System.Windows.Forms.Button btnAddToOrder;
         private System.Windows.Forms.Label lblSize;
         private System.Windows.Forms.Label lblCount;
+        private System.Windows.Forms.ToolTip toolTip1; // <--- ОБЪЯВЛЕНИЕ
 
         protected override void Dispose(bool disposing)
         {
@@ -21,6 +22,7 @@
 
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.picProduct = new System.Windows.Forms.PictureBox();
             this.lblName = new System.Windows.Forms.Label();
             this.lblPrice = new System.Windows.Forms.Label();
@@ -30,6 +32,7 @@
             this.btnAddToOrder = new System.Windows.Forms.Button();
             this.lblSize = new System.Windows.Forms.Label();
             this.lblCount = new System.Windows.Forms.Label();
+            this.toolTip1 = new System.Windows.Forms.ToolTip(this.components); // <--- СОЗДАНИЕ
             ((System.ComponentModel.ISupportInitialize)(this.picProduct)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numCount)).BeginInit();
             this.SuspendLayout();
@@ -89,6 +92,11 @@
             this.btnAddToOrder.Text = "Добавить в заказ";
             this.btnAddToOrder.UseVisualStyleBackColor = false;
             this.btnAddToOrder.Click += new System.EventHandler(this.btnAddToOrder_Click);
+
+            // ПОДСКАЗКИ (после того, как все элементы созданы)
+            this.toolTip1.SetToolTip(this.btnAddToOrder, "Добавить выбранный товар в корзину");
+            this.toolTip1.SetToolTip(this.cmbSize, "Выберите доступный размер");
+            this.toolTip1.SetToolTip(this.numCount, "Укажите количество пар (не больше остатка на складе)");
 
             // ProductForm
             this.ClientSize = new System.Drawing.Size(520, 300);

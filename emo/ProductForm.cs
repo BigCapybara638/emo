@@ -3,7 +3,6 @@ using System.Data.SqlClient;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using emo;
 
 namespace emo
 {
@@ -26,6 +25,7 @@ namespace emo
             lblName.Text = _product.Name;
             lblPrice.Text = $"{_product.Price} ₽";
             lblDescription.Text = $"Производство: {_product.Manufacture}\nСостав: {_product.Composition}";
+
             string imgPath = Path.Combine(Application.StartupPath, "Resources", _product.Image ?? "");
             if (!File.Exists(imgPath)) imgPath = Path.Combine(Application.StartupPath, "Resources", "picture.png");
             if (File.Exists(imgPath)) picProduct.Image = Image.FromFile(imgPath);
@@ -60,13 +60,23 @@ namespace emo
                     }
                 }
             }
-            if (cmbSize.Items.Count > 0) { cmbSize.SelectedIndex = 0; numCount.Maximum = 1000; }
-            else { MessageBox.Show("Нет товара в наличии."); btnAddToOrder.Enabled = false; }
+
+            if (cmbSize.Items.Count > 0)
+            {
+                cmbSize.SelectedIndex = 0;
+                numCount.Maximum = 1000;
+            }
+            else
+            {
+                MessageBox.Show("Нет товара в наличии.");
+                btnAddToOrder.Enabled = false;
+            }
         }
 
         private void btnAddToOrder_Click(object sender, EventArgs e)
         {
             if (cmbSize.SelectedItem == null) return;
+
             var item = (ComboBoxItem)cmbSize.SelectedItem;
             int count = (int)numCount.Value;
 
@@ -85,7 +95,7 @@ namespace emo
                 Price = _product.Price
             });
 
-            MessageBox.Show($"Товар добавлен в корзину!\nПозиций в корзине: {Cart.Items.Count}", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Товар добавлен в корзину!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
             this.Close();
         }
     }

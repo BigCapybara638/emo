@@ -14,14 +14,10 @@ namespace emo
         {
             InitializeComponent();
             _userRole = userRole;
-
-            // Редактирование только для админа (роль 1)
-            btnEditDate.Visible = (_userRole == 1);
-
+            btnEditDate.Visible = (_userRole == 1); // Редактирование только админу
             LoadOrders();
         }
 
-        // Загрузка списка заказов
         private void LoadOrders()
         {
             try
@@ -34,7 +30,6 @@ namespace emo
                                  FROM Orders_import$ o
                                  JOIN Users$ u ON o.id_user = u.id
                                  ORDER BY o.[Дата заказа] DESC";
-
                     using (var adapter = new SqlDataAdapter(q, conn))
                     {
                         var dt = new DataTable();
@@ -43,17 +38,15 @@ namespace emo
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка загрузки заказов: {ex.Message}");
-            }
+            catch (Exception ex) { MessageBox.Show($"Ошибка загрузки заказов: {ex.Message}"); }
         }
 
-        // Удаление заказа
         private void btnDeleteOrder_Click(object sender, EventArgs e)
         {
             if (dgvOrders.SelectedRows.Count == 0) return;
-            int orderId = Convert.ToInt32(dgvOrders.SelectedRows[0].Cells["id"].Value);
+            object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
+            if (idObj == null || idObj == DBNull.Value) return;
+            int orderId = Convert.ToInt32(idObj);
 
             if (MessageBox.Show("Удалить заказ? Товары вернутся на склад.", "Подтверждение", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
@@ -64,9 +57,9 @@ namespace emo
                         conn.Open();
                         // 1. Возвращаем товары на склад
                         string qReturn = @"UPDATE si SET si.count = si.count + os.[Количество]
-                                   FROM Stock_items$ si
-                                   JOIN Order_stock$ os ON si.id = os.id_stock_items
-                                   WHERE os.id_order = @id";
+                                           FROM Stock_items$ si
+                                           JOIN Order_stock$ os ON si.id = os.id_stock_items
+                                           WHERE os.id_order = @id";
                         using (var cmd = new SqlCommand(qReturn, conn))
                         {
                             cmd.Parameters.AddWithValue("@id", orderId);
@@ -77,24 +70,16 @@ namespace emo
                         new SqlCommand($"DELETE FROM Orders_import$ WHERE id = {orderId}", conn).ExecuteNonQuery();
                     }
                     LoadOrders();
-                    MessageBox.Show("Заказ удален, товары возвращены на склад.", "Успех");
                 }
-                catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
+                catch (Exception ex) { MessageBox.Show($"Ошибка при удалении: {ex.Message}"); }
             }
         }
 
-        // Просмотр состава заказа
         private void btnViewDetails_Click(object sender, EventArgs e)
         {
             if (dgvOrders.SelectedRows.Count == 0) return;
-
-            // Безопасно получаем id
             object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
-            if (idObj == null || idObj == DBNull.Value)
-            {
-                MessageBox.Show("У выбранного заказа отсутствует ID.", "Ошибка");
-                return;
-            }
+            if (idObj == null || idObj == DBNull.Value) return;
             int orderId = Convert.ToInt32(idObj);
 
             try
@@ -118,60 +103,28 @@ namespace emo
                         {
                             var dt = new DataTable();
                             adapter.Fill(dt);
+                            if (dt.Rows.Count == 0) { MessageBox.Show("В заказе нет товаров."); return; }
 
-                            if (dt.Rows.Count == 0)
-                            {
-                                MessageBox.Show("В этом заказе нет товарных позиций (или они были удалены).", "Пустой заказ");
-                                return;
-                            }
-
-                            var detailsForm = new Form
-                            {
-                                Text = $"Состав заказа №{orderId}",
-                                Size = new Size(700, 300),
-                                StartPosition = FormStartPosition.CenterParent
-                            };
-
-                            var grid = new DataGridView
-                            {
-                                Dock = DockStyle.Fill,
-                                DataSource = dt,
-                                ReadOnly = true,
-                                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                                AllowUserToAddRows = false
-                            };
-
+                            var detailsForm = new Form { Text = $"Состав заказа №{orderId}", Size = new Size(700, 300), StartPosition = FormStartPosition.CenterParent };
+                            var grid = new DataGridView { Dock = DockStyle.Fill, DataSource = dt, ReadOnly = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, AllowUserToAddRows = false };
                             detailsForm.Controls.Add(grid);
                             detailsForm.ShowDialog();
                         }
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при загрузке состава: {ex.Message}\n\n{ex.StackTrace}", "Ошибка");
-            }
+            catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
         }
 
-        // Редактирование даты (только для админа)
         private void btnEditDate_Click(object sender, EventArgs e)
         {
             if (dgvOrders.SelectedRows.Count == 0) return;
-
-            // Безопасно получаем id
             object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
-            if (idObj == null || idObj == DBNull.Value)
-            {
-                MessageBox.Show("У выбранного заказа отсутствует ID. Редактирование невозможно.", "Ошибка");
-                return;
-            }
+            if (idObj == null || idObj == DBNull.Value) return;
             int orderId = Convert.ToInt32(idObj);
 
-            // Безопасно получаем дату
             object dateObj = dgvOrders.SelectedRows[0].Cells["Дата заказа"].Value;
-            DateTime currentDate = (dateObj == null || dateObj == DBNull.Value)
-                ? DateTime.Now
-                : Convert.ToDateTime(dateObj);
+            DateTime currentDate = (dateObj == null || dateObj == DBNull.Value) ? DateTime.Now : Convert.ToDateTime(dateObj);
 
             using (var editForm = new Form())
             {
@@ -189,21 +142,12 @@ namespace emo
                         using (var conn = new SqlConnection(DBHelper.connectionString))
                         {
                             conn.Open();
-                            string q = "UPDATE Orders_import$ SET [Дата заказа] = @date WHERE id = @id";
-                            using (var cmd = new SqlCommand(q, conn))
-                            {
-                                cmd.Parameters.AddWithValue("@date", dtp.Value);
-                                cmd.Parameters.AddWithValue("@id", orderId);
-                                cmd.ExecuteNonQuery();
-                            }
+                            new SqlCommand($"UPDATE Orders_import$ SET [Дата заказа] = '{dtp.Value:yyyy-MM-dd HH:mm:ss}' WHERE id = {orderId}", conn).ExecuteNonQuery();
                         }
                         editForm.Close();
-                        LoadOrders(); // Обновляем список после изменения
+                        LoadOrders();
                     }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Ошибка при обновлении даты: {ex.Message}");
-                    }
+                    catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
                 };
 
                 editForm.Controls.Add(dtp);
@@ -211,5 +155,30 @@ namespace emo
                 editForm.ShowDialog();
             }
         }
+
+        private void btnAddItem_Click(object sender, EventArgs e)
+        {
+            if (dgvOrders.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Выберите заказ, в который нужно добавить товар.", "Внимание");
+                return;
+            }
+
+            object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
+            if (idObj == null || idObj == DBNull.Value)
+            {
+                MessageBox.Show("У выбранного заказа отсутствует ID.", "Ошибка");
+                return;
+            }
+            int orderId = Convert.ToInt32(idObj);
+
+            using (var addForm = new AddItemForm(orderId))
+            {
+                if (addForm.ShowDialog() == DialogResult.OK)
+                {
+                    LoadOrders(); // Обновляем список заказов
+                }
+            }
+        }
     }
-}
+    }
