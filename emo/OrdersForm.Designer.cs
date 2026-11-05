@@ -63,6 +63,7 @@
 
             // OrdersForm
             this.ClientSize = new System.Drawing.Size(800, 500);
+            this.MinimumSize = new System.Drawing.Size(800, 450);
             this.Controls.Add(this.dgvOrders);
             this.Controls.Add(this.btnViewDetails);
             this.Controls.Add(this.btnDeleteOrder);
