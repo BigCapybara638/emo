@@ -17,7 +17,7 @@ namespace emo
             btnEditDate.Visible = (_userRole == 1); // Редактирование только админу
             LoadOrders();
         }
-
+        //ready
         private void LoadOrders()
         {
             try
