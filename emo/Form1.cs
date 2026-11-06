@@ -51,7 +51,6 @@ namespace emo
         {
             string resPath = Path.Combine(Application.StartupPath, "Resources");
             if (File.Exists(Path.Combine(resPath, "icon.ico"))) this.Icon = new Icon(Path.Combine(resPath, "icon.ico"));
-            if (File.Exists(Path.Combine(resPath, "logo.png"))) pictureBoxLogo.Image = Image.FromFile(Path.Combine(resPath, "logo.png"));
         }
 
         private void LoadProducts()

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -80,12 +81,23 @@ namespace emo
             var item = (ComboBoxItem)cmbSize.SelectedItem;
             int count = (int)numCount.Value;
 
-            if (count > item.MaxCount)
+            // Считаем, сколько этого же товара (этой же складской позиции) уже в корзине
+            int alreadyInCart = Cart.Items.Where(ci => ci.StockItemId == item.Value).Sum(ci => ci.Count);
+
+            // Проверяем: (уже в корзине + новое количество) не должно превышать остаток на складе
+            if (alreadyInCart + count > item.MaxCount)
             {
-                MessageBox.Show($"На складе только {item.MaxCount} пар. Уменьшите количество.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(
+                    $"На складе всего {item.MaxCount} пар.\n" +
+                    $"В корзине уже {alreadyInCart} пар.\n" +
+                    $"Вы можете добавить не более {item.MaxCount - alreadyInCart} пар.",
+                    "Недостаточно товара",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
                 return;
             }
 
+            // Добавляем в корзину
             Cart.Add(new CartItem
             {
                 StockItemId = item.Value,
@@ -95,7 +107,7 @@ namespace emo
                 Price = _product.Price
             });
 
-            MessageBox.Show($"Товар добавлен в корзину!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Товар добавлен в корзину!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
             this.Close();
         }
     }

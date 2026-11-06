@@ -78,42 +78,133 @@ namespace emo
         private void btnViewDetails_Click(object sender, EventArgs e)
         {
             if (dgvOrders.SelectedRows.Count == 0) return;
+
             object idObj = dgvOrders.SelectedRows[0].Cells["id"].Value;
-            if (idObj == null || idObj == DBNull.Value) return;
+            if (idObj == null || idObj == DBNull.Value) { MessageBox.Show("Нет ID заказа."); return; }
             int orderId = Convert.ToInt32(idObj);
 
-            try
+            var detailsForm = new Form
             {
-                using (var conn = new SqlConnection(DBHelper.connectionString))
+                Text = $"Состав заказа №{orderId}",
+                Size = new Size(800, 450),
+                MinimumSize = new Size(800, 450),
+                StartPosition = FormStartPosition.CenterParent,
+                BackColor = Color.White
+            };
+
+            var grid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                AllowUserToAddRows = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
+
+            var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 50 };
+
+            var btnRemoveItem = new Button
+            {
+                Text = "Удалить выбранную позицию",
+                Location = new Point(10, 10),
+                Size = new Size(220, 30),
+                BackColor = ColorTranslator.FromHtml("#ff8080"),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Calibri", 10, FontStyle.Bold)
+            };
+
+            Action loadDetails = () =>
+            {
+                try
                 {
-                    conn.Open();
-                    string q = @"SELECT p.[Наименование товара], s.[Размер], os.[Количество], 
-                                        p.[Цена] AS [Цена за ед.], 
-                                        (os.[Количество] * p.[Цена]) AS [Сумма]
-                                 FROM Order_stock$ os
-                                 JOIN Stock_items$ si ON os.id_stock_items = si.id
-                                 JOIN Products$ p ON si.id_tovar = p.id
-                                 JOIN Sizes$ s ON si.id_sizes = s.id
-                                 WHERE os.id_order = @id";
-
-                    using (var cmd = new SqlCommand(q, conn))
+                    using (var conn = new SqlConnection(DBHelper.connectionString))
                     {
-                        cmd.Parameters.AddWithValue("@id", orderId);
-                        using (var adapter = new SqlDataAdapter(cmd))
-                        {
-                            var dt = new DataTable();
-                            adapter.Fill(dt);
-                            if (dt.Rows.Count == 0) { MessageBox.Show("В заказе нет товаров."); return; }
+                        conn.Open();
+                        string q = @"SELECT p.[Наименование товара], s.[Размер], os.[Количество], 
+                                    p.[Цена] AS [Цена за ед.], 
+                                    (os.[Количество] * p.[Цена]) AS [Сумма],
+                                    os.id_stock_items AS [StockItemId]
+                             FROM Order_stock$ os
+                             JOIN Stock_items$ si ON os.id_stock_items = si.id
+                             JOIN Products$ p ON si.id_tovar = p.id
+                             JOIN Sizes$ s ON si.id_sizes = s.id
+                             WHERE os.id_order = @id";
 
-                            var detailsForm = new Form { Text = $"Состав заказа №{orderId}", Size = new Size(700, 300), StartPosition = FormStartPosition.CenterParent };
-                            var grid = new DataGridView { Dock = DockStyle.Fill, DataSource = dt, ReadOnly = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, AllowUserToAddRows = false };
-                            detailsForm.Controls.Add(grid);
-                            detailsForm.ShowDialog();
+                        using (var cmd = new SqlCommand(q, conn))
+                        {
+                            cmd.Parameters.AddWithValue("@id", orderId);
+                            using (var adapter = new SqlDataAdapter(cmd))
+                            {
+                                var dt = new DataTable();
+                                adapter.Fill(dt);
+                                grid.DataSource = dt;
+
+                                if (grid.Columns.Contains("StockItemId"))
+                                    grid.Columns["StockItemId"].Visible = false;
+                            }
                         }
                     }
                 }
-            }
-            catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
+                catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
+            };
+
+            loadDetails();
+
+            btnRemoveItem.Click += (s, ev) =>
+            {
+                if (grid.SelectedRows.Count == 0)
+                {
+                    MessageBox.Show("Выберите товар для удаления.", "Внимание");
+                    return;
+                }
+
+                if (MessageBox.Show("Удалить эту позицию из заказа? Товар вернется на склад.", "Подтверждение", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                {
+                    try
+                    {
+                        var row = grid.SelectedRows[0];
+                        int stockItemId = Convert.ToInt32(row.Cells["StockItemId"].Value);
+                        int count = Convert.ToInt32(row.Cells["Количество"].Value);
+
+                        using (var conn = new SqlConnection(DBHelper.connectionString))
+                        {
+                            conn.Open();
+
+                            // 1. Возвращаем на склад
+                            new SqlCommand($"UPDATE Stock_items$ SET count = count + {count} WHERE id = {stockItemId}", conn).ExecuteNonQuery();
+
+                            // 2. Удаляем позицию из заказа
+                            new SqlCommand($"DELETE FROM Order_stock$ WHERE id_order = {orderId} AND id_stock_items = {stockItemId}", conn).ExecuteNonQuery();
+
+                            // 3. ПРОВЕРКА: остались ли ещё товары в заказе?
+                            int remaining = Convert.ToInt32(new SqlCommand($"SELECT COUNT(*) FROM Order_stock$ WHERE id_order = {orderId}", conn).ExecuteScalar());
+
+                            if (remaining == 0)
+                            {
+                                // Если товаров нет — удаляем сам заказ
+                                new SqlCommand($"DELETE FROM Orders_import$ WHERE id = {orderId}", conn).ExecuteNonQuery();
+
+                                MessageBox.Show("Все позиции удалены. Заказ полностью удалён.", "Заказ удалён");
+                                detailsForm.Close();
+                                LoadOrders(); // Обновляем список заказов в главной форме
+                                return;
+                            }
+                        }
+
+                        // Если заказ ещё есть, просто обновляем таблицу
+                        loadDetails();
+                        LoadOrders();
+                        MessageBox.Show("Позиция удалена, товар возвращен на склад.", "Успех");
+                    }
+                    catch (Exception ex) { MessageBox.Show($"Ошибка: {ex.Message}"); }
+                }
+            };
+
+            panelBottom.Controls.Add(btnRemoveItem);
+            detailsForm.Controls.Add(grid);
+            detailsForm.Controls.Add(panelBottom);
+            detailsForm.ShowDialog();
         }
 
         private void btnEditDate_Click(object sender, EventArgs e)

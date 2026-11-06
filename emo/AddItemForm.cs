@@ -101,7 +101,7 @@ namespace emo
                         cmd.ExecuteNonQuery();
                     }
 
-                    string qUpdate = "UPDATE Stock_items SET count = count - @count WHERE id = @stock";
+                    string qUpdate = "UPDATE Stock_items$ SET count = count - @count WHERE id = @stock";
                     using (var cmd = new SqlCommand(qUpdate, conn))
                     {
                         cmd.Parameters.AddWithValue("@count", count);

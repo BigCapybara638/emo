@@ -164,7 +164,7 @@
 
             // Form1
             this.ClientSize = new System.Drawing.Size(800, 600);
-            this.MinimumSize = new System.Drawing.Size(800, 500);
+            this.MinimumSize = new System.Drawing.Size(900, 500);
             this.Controls.Add(this.panelContent);
             this.Controls.Add(this.panelFilters);
             this.Controls.Add(this.panelHeader);
