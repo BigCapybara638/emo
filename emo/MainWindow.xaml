@@ -1,0 +1,106 @@
+<Window x:Class="emo.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Чудо Обувь — Каталог" Style="{StaticResource {x:Type Window}}"
+        Width="1080" Height="760" MinWidth="960" MinHeight="650" WindowStartupLocation="CenterScreen" Icon="Resources/icon.ico">
+    <DockPanel>
+        <DockPanel DockPanel.Dock="Top" Background="#D2F6E7" Margin="0,0,0,8">
+            <Button x:Name="BackButton" Content="Назад" Click="BackClick" />
+            <Image Source="Resources/icon.ico" Width="40" Height="40" Margin="8" />
+            <TextBlock x:Name="PageTitle" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" Content="Выйти" Click="Logout" />
+            <TextBlock x:Name="UserName" DockPanel.Dock="Right" TextAlignment="Right" VerticalAlignment="Center" />
+        </DockPanel>
+        <TabControl x:Name="Pages" BorderThickness="0">
+            <TabControl.Resources><Style TargetType="TabItem"><Setter Property="Visibility" Value="Collapsed" /></Style></TabControl.Resources>
+            <TabItem>
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <TextBox x:Name="Search" Width="240" Margin="4" ToolTip="Поиск по названию и описанию" TextChanged="Filter" />
+                        <ComboBox x:Name="Category" Width="210" SelectionChanged="Filter" />
+                        <ComboBox x:Name="Sort" Width="210" SelectedIndex="0" SelectionChanged="Filter">
+                            <ComboBoxItem Content="Цена: по возрастанию" />
+                            <ComboBoxItem Content="Цена: по убыванию" />
+                        </ComboBox>
+                        <Button x:Name="CartButton" Content="Корзина" Click="OpenCart" />
+                        <Button x:Name="OrdersButton" Content="Заказы" Click="OpenOrders" />
+                    </StackPanel>
+                    <ListBox x:Name="Products" SelectionChanged="SelectProduct" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="10" Margin="0,3" BorderBrush="#70B2AF" BorderThickness="1">
+                                    <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="White" />
+                                        <Style.Triggers><DataTrigger Binding="{Binding LowStock}" Value="True"><Setter Property="Background" Value="#FF8080" /></DataTrigger></Style.Triggers>
+                                    </Style></Border.Style>
+                                    <Grid MinHeight="130">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
+                                        <Image Source="{Binding ImagePath}" Width="95" Height="100" />
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Manufacture, StringFormat=Производство: {0}}" />
+                                            <TextBlock Text="{Binding Category, StringFormat=Категория: {0}}" />
+                                            <TextBlock Text="{Binding Composition, StringFormat=Состав: {0}}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding CountText, StringFormat=Количество: {0}}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding PriceText}" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+            <TabItem>
+                <DockPanel Margin="20">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal">
+                        <TextBlock Text="Размер:" VerticalAlignment="Center" />
+                        <ComboBox x:Name="SizeChoice" Width="230" />
+                        <TextBlock Text="Количество:" VerticalAlignment="Center" />
+                        <TextBox x:Name="Quantity" Text="1" Width="65" VerticalContentAlignment="Center" />
+                        <Button x:Name="AddButton" Content="В корзину" Click="AddItem" />
+                        <Button x:Name="BuyButton" Content="Оформить сразу" Click="BuyNow" />
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ProductDetails">
+                            <Image Source="{Binding ImagePath}" Height="210" HorizontalAlignment="Left" />
+                            <TextBlock Text="{Binding Name}" FontSize="24" FontWeight="Bold" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding PriceText}" FontSize="20" Foreground="#438481" />
+                            <TextBlock Text="{Binding Manufacture, StringFormat=Производство: {0}}" />
+                            <TextBlock Text="{Binding Category, StringFormat=Категория: {0}}" />
+                            <TextBlock Text="{Binding Description, StringFormat=Описание: {0}}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Composition, StringFormat=Состав: {0}}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SizeRange" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+            <TabItem>
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal">
+                        <Button Content="Новый заказ" Click="NewOrder" />
+                        <Button Content="Состав заказа" Click="ViewOrder" />
+                        <Button Content="Удалить заказ" Click="DeleteOrder" />
+                    </StackPanel>
+                    <DataGrid x:Name="Orders" AutoGeneratingColumn="GenerateColumn" />
+                </DockPanel>
+            </TabItem>
+            <TabItem>
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <TextBlock Text="Дата:" VerticalAlignment="Center" />
+                        <DatePicker x:Name="OrderDate" Width="150" Margin="4" />
+                        <TextBlock Text="Клиент:" VerticalAlignment="Center" />
+                        <ComboBox x:Name="Customer" Width="400" DisplayMemberPath="ФИО" SelectedValuePath="id" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <TextBlock x:Name="Total" FontSize="22" FontWeight="Bold" />
+                        <WrapPanel>
+                            <Button Content="Добавить товар из каталога" Click="ChooseItem" />
+                            <Button x:Name="RemoveButton" Content="Удалить позицию" Click="RemoveItem" />
+                            <Button x:Name="SaveButton" Content="Подтвердить заказ" Click="SaveOrder" />
+                        </WrapPanel>
+                    </StackPanel>
+                    <DataGrid x:Name="Items" AutoGeneratingColumn="GenerateColumn" />
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

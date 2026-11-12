@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework Condition="'$(ValidationFramework)' == ''">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(ValidationFramework)' != ''">$(ValidationFramework)</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <StartupObject>Regression</StartupObject>
+    <RootNamespace>emo</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../emo/*.cs" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.1" />
+    <Page Include="../emo/MainWindow.xaml" Link="MainWindow.xaml" />
+    <Page Include="../emo/LoginWindow.xaml" Link="LoginWindow.xaml" />
+    <ApplicationDefinition Include="../emo/App.xaml" Link="App.xaml" />
+    <Resource Include="../emo/Resources/icon.ico" Link="Resources/icon.ico" LogicalName="resources/icon.ico" />
+    <Content Include="../emo/Resources/*.png" Link="Resources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
