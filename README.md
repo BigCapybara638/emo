@@ -32,6 +32,9 @@ SQL Server и SSMS устанавливаются отдельно. Скрипт
 **Если база `demo` уже есть:** сначала выполните `database/rename_tables.sql`,
 затем `database/upgrade.sql`. Переименование сохраняет данные и внешние ключи;
 при конфликте имён изменения отменяются.
+Если таблицы уже имеют имена без `$`, первый скрипт ничего не меняет.
+`upgrade.sql` также переименует старые поля `Наименование товара` → `Наименование`
+и `Дата заказа` → `Дата_заказа`, если это требуется.
 `upgrade.sql` добавляет сохранённую цену и процент скидки к позициям заказа.
 Скрипт можно запускать повторно: уже сохранённые цены он не меняет.
 
@@ -39,6 +42,14 @@ SQL Server и SSMS устанавливаются отдельно. Скрипт
 выполните `database/create.sql` и `database/upgrade.sql`.
 `create.sql` создаёт связанные таблицы и загружает исходные данные из
 сохранённого в репозитории `import.xlsx`; в непустую базу его запускать нельзя.
+Скрипт сам создаёт базу **demo**, если её ещё нет. Таблицы соответствуют
+предоставленной структуре: девять `id` с `IDENTITY`, размер `DECIMAL(4,1)`,
+цена товара `DECIMAL(12,2)`, дата `Дата_заказа DATETIME2(0)`, название товара
+`Наименование` и ключ `Order_stock (id_order, id_stock_items)`.
+Старые таблицы скрипт не удаляет. Полное совпадение типов и `IDENTITY`
+обеспечивается при создании новой базы; `upgrade.sql` не перестраивает
+имеющиеся столбцы `id`. Для уже созданной по предоставленной схеме базы
+достаточно выполнить `upgrade.sql` для сохранения цен заказов.
 
 В начале `emo/DBHelper.cs` измените `Data Source=USERS\SQLEXPRESS` на имя своего
 SQL Server, например `localhost` или `.\SQLEXPRESS`. `Database=demo` и
@@ -97,9 +108,12 @@ dotnet publish emo/emo.csproj -c Release -o artifacts/app
 
 Регрессионные проверки используют отдельную базу с именем `emo_validation_*`.
 Создайте её, выполните оба SQL-скрипта, затем:
+В тестовой копии `create.sql` сначала замените **все три** начальных
+упоминания `demo` (проверка, создание и `USE`) на имя тестовой базы.
+Исходный `create.sql` всегда выбирает `demo` независимо от текущей базы в SSMS.
 
 ```powershell
-$env:EMO_TEST_CONNECTION = 'Data Source=localhost;Database=emo_validation_20261112;Integrated Security=True;TrustServerCertificate=True'
+$env:EMO_TEST_CONNECTION = 'Data Source=localhost;Database=emo_validation_schema_20261112;Integrated Security=True;TrustServerCertificate=True'
 dotnet run --project tests/Regression.csproj
 ```
 

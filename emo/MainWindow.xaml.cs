@@ -171,8 +171,8 @@ public partial class MainWindow : Window
     private void ShowOrders()
     {
         Page(2, "Заказы");
-        Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата заказа], CONCAT(u.[Фамилия],' ',u.[Имя],' ',u.[Отчество]) AS [ФИО клиента]
-            FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата заказа] DESC").DefaultView;
+        Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата_заказа], CONCAT(u.[Фамилия],' ',u.[Имя],' ',u.[Отчество]) AS [ФИО клиента]
+            FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата_заказа] DESC").DefaultView;
     }
 
     private int SelectedOrderId() => Orders.SelectedItem is DataRowView row ? Convert.ToInt32(row["id"])
@@ -207,8 +207,8 @@ public partial class MainWindow : Window
         Page(3, draft.Id is { } id ? $"Состав заказа №{id}" : draft.FromCart ? "Корзина" : "Новый заказ");
         if (draft.Id is { } existing)
         {
-            var row = DBHelper.Query("SELECT [Дата заказа],id_user FROM Orders_import WHERE id=@id", ("@id", existing)).Rows[0];
-            draft.Date = Convert.ToDateTime(row["Дата заказа"]);
+            var row = DBHelper.Query("SELECT [Дата_заказа],id_user FROM Orders_import WHERE id=@id", ("@id", existing)).Rows[0];
+            draft.Date = Convert.ToDateTime(row["Дата_заказа"]);
             draft.UserId = Convert.ToInt32(row["id_user"]);
         }
         OrderDate.SelectedDate = draft.Date;
@@ -282,7 +282,7 @@ public partial class MainWindow : Window
         if (order.Id is { } id)
         {
             if (!Admin) return;
-            DBHelper.Execute("UPDATE Orders_import SET [Дата заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
+            DBHelper.Execute("UPDATE Orders_import SET [Дата_заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
             order.Date = date;
         }
         else

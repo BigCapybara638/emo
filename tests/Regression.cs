@@ -31,17 +31,26 @@ internal static class Regression
     static int Main()
     {
         DBHelper.connectionString = Environment.GetEnvironmentVariable("EMO_TEST_CONNECTION")
-            ?? "Data Source=localhost;Database=emo_validation_20261112;Integrated Security=True;TrustServerCertificate=True";
+            ?? "Data Source=localhost;Database=emo_validation_schema_20261112;Integrated Security=True;TrustServerCertificate=True";
         if (!new System.Data.SqlClient.SqlConnectionStringBuilder(DBHelper.connectionString).InitialCatalog.StartsWith("emo_validation_"))
             throw new Exception("Tests require an isolated emo_validation_ database.");
         try
         {
+            Check(Scalar(@"SELECT COUNT(*) FROM sys.columns c JOIN sys.tables t ON c.object_id=t.object_id
+                WHERE c.name='id' AND c.is_identity=1") == 9, "all nine id columns are identity");
+            Check(Scalar(@"SELECT COUNT(*) FROM sys.index_columns i JOIN sys.key_constraints k
+                ON k.parent_object_id=i.object_id AND k.unique_index_id=i.index_id
+                WHERE k.name='PK_Order_stock'") == 2, "order lines have a two-column primary key");
+            Reset();
+            int earlyOrder = DBHelper.SaveOrder(null, 3, new DateTime(1, 1, 1), [Item()]);
+            Check(Convert.ToDateTime(DBHelper.Query("SELECT Дата_заказа FROM Orders_import WHERE id=@id", ("@id", earlyOrder)).Rows[0][0]).Year == 1,
+                "datetime2 date outside legacy datetime range is supported");
             var month = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
             foreach (var (date, expected) in new[] { (month.AddSeconds(-1), 100m), (month.AddMonths(-1), 100m),
                 (month, 75m), (month.AddMonths(-1).AddSeconds(-1), 75m) })
             {
                 Reset();
-                DBHelper.Execute(@"INSERT INTO Orders_import ([Дата заказа],id_user) VALUES (@date,3);
+                DBHelper.Execute(@"INSERT INTO Orders_import ([Дата_заказа],id_user) VALUES (@date,3);
                     INSERT INTO Order_stock (id_order,id_stock_items,[Количество],[Цена],[Скидка])
                     SELECT MAX(id),1,1,100,0 FROM Orders_import", ("@date", date));
                 Check(DBHelper.GetPriceWithDiscount(1, 100m) == expected, $"discount boundary {date:yyyy-MM-dd HH:mm:ss}");
@@ -61,6 +70,14 @@ internal static class Regression
             Check(Convert.ToDecimal(DBHelper.OrderItems(order).Rows[0]["Цена за ед."]) == p.Price, "price snapshot survives product repricing");
             DBHelper.SaveOrder(order, 3, DateTime.Today, [Item(count: 3)]);
             Check(Convert.ToInt32(DBHelper.OrderItems(order).Rows[0]["Количество"]) == 5, "repeated stock lines aggregate");
+            Check(Scalar($"SELECT COUNT(*) FROM Order_stock WHERE id_order={order} AND id_stock_items=1") == 1,
+                "repeated product uses one composite-key row");
+            bool differentPrice = false;
+            try { DBHelper.SaveOrder(order, 3, DateTime.Today, [Item(count: 1, price: 999)]); }
+            catch (System.Data.SqlClient.SqlException ex) when (ex.Number == 50002) { differentPrice = true; }
+            Check(differentPrice && Scalar("SELECT count FROM Stock_items WHERE id=1") == 15
+                && Convert.ToDecimal(DBHelper.OrderItems(order).Rows[0]["Цена за ед."]) == p.Price,
+                "different quote cannot overwrite stored price or reduce stock");
             DBHelper.DeleteOrder(order, 1, p.Price, 25);
             Check(Scalar("SELECT count FROM Stock_items WHERE id=1") == 20 && Scalar("SELECT COUNT(*) FROM Orders_import") == 0, "delete returns all duplicate quantities and removes empty order");
             Reset();
