@@ -22,7 +22,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        ContentRendered += (_, _) => Authorize();
     }
 
     private static void Run(Action action)
@@ -34,14 +33,8 @@ public partial class MainWindow : Window
     private static bool Confirm(string text) => MessageBox.Show(text, "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
     private static void Info(string text) => MessageBox.Show(text, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private void Authorize()
+    internal void StartSession(LoginWindow login)
     {
-        var login = new LoginWindow { Owner = this };
-        if (login.ShowDialog() != true)
-        {
-            Close();
-            return;
-        }
         userId = login.UserId;
         role = login.UserRole;
         UserName.Text = login.UserFIO;
@@ -174,7 +167,7 @@ public partial class MainWindow : Window
     {
         Page(2, "Заказы");
         Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата заказа], CONCAT(u.[Фамилия],' ',u.[Имя],' ',u.[Отчество]) AS [ФИО клиента]
-            FROM Orders_import$ o JOIN Users$ u ON o.id_user=u.id ORDER BY o.[Дата заказа] DESC").DefaultView;
+            FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата заказа] DESC").DefaultView;
     }
 
     private int SelectedOrderId() => Orders.SelectedItem is DataRowView row ? Convert.ToInt32(row["id"])
@@ -209,7 +202,7 @@ public partial class MainWindow : Window
         Page(3, draft.Id is { } id ? $"Состав заказа №{id}" : draft.FromCart ? "Корзина" : "Новый заказ");
         if (draft.Id is { } existing)
         {
-            var row = DBHelper.Query("SELECT [Дата заказа],id_user FROM Orders_import$ WHERE id=@id", ("@id", existing)).Rows[0];
+            var row = DBHelper.Query("SELECT [Дата заказа],id_user FROM Orders_import WHERE id=@id", ("@id", existing)).Rows[0];
             draft.Date = Convert.ToDateTime(row["Дата заказа"]);
             draft.UserId = Convert.ToInt32(row["id_user"]);
         }
@@ -281,7 +274,7 @@ public partial class MainWindow : Window
         if (order.Id is { } id)
         {
             if (!Admin) return;
-            DBHelper.Execute("UPDATE Orders_import$ SET [Дата заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
+            DBHelper.Execute("UPDATE Orders_import SET [Дата заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
             order.Date = date;
         }
         else
@@ -304,6 +297,9 @@ public partial class MainWindow : Window
 
     private void Logout(object sender, RoutedEventArgs e)
     {
-        if (Confirm("Выйти из аккаунта? Несохранённые позиции будут потеряны.")) Authorize();
+        if (!Confirm("Выйти из аккаунта? Несохранённые позиции будут потеряны.")) return;
+        Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        Close();
+        ((App)Application.Current).SignIn();
     }
 }
