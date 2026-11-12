@@ -5,8 +5,14 @@ namespace emo;
 public partial class LoginWindow : Window
 {
     public string UserFIO { get; private set; } = "";
-    public int UserRole { get; private set; }
-    public int UserId { get; private set; }
+    public int UserRole
+    {
+        get; private set;
+    }
+    public int UserId
+    {
+        get; private set;
+    }
 
     public LoginWindow()
     {
@@ -36,6 +42,7 @@ public partial class LoginWindow : Window
             UserId = user.Id;
             DialogResult = true;
         }
-        else MessageBox.Show("Пользователь с таким логином не найден!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+        else
+            MessageBox.Show("Пользователь с таким логином не найден!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 }

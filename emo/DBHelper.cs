@@ -15,7 +15,8 @@ public static class DBHelper
         foreach (var (name, value) in args)
         {
             var parameter = cmd.Parameters.AddWithValue(name, value);
-            if (value is DateTime) parameter.SqlDbType = SqlDbType.DateTime2;
+            if (value is DateTime)
+                parameter.SqlDbType = SqlDbType.DateTime2;
         }
         return cmd;
     }
@@ -51,22 +52,29 @@ public static class DBHelper
     public static List<Product> LoadProducts(int? id = null)
     {
         var (start, end) = Pricing.PreviousMonth(DateTime.Now);
-        return Query(@"SELECT p.*, c.[Категория], m.[Производство],
+        return Query(@"SELECT p.*, c.[Категория], sub.[Подкатегория], m.[Производство],
             (SELECT COALESCE(SUM(count),0) FROM Stock_items WHERE id_tovar=p.id) AS total_count,
             CASE WHEN EXISTS (SELECT 1 FROM Order_stock os
                 JOIN Orders_import o ON os.id_order=o.id JOIN Stock_items si ON os.id_stock_items=si.id
                 WHERE si.id_tovar=p.id AND o.[Дата_заказа]>=@start AND o.[Дата_заказа]<@end)
                 THEN 0 ELSE 1 END AS discounted
             FROM Products p LEFT JOIN Categories c ON p.id_category=c.id
+            LEFT JOIN Subcategories sub ON p.id_subcategory=sub.id
             LEFT JOIN Manufactures m ON p.id_manufactures=m.id WHERE @id IS NULL OR p.id=@id",
             ("@start", start), ("@end", end), ("@id", (object?)id ?? DBNull.Value))
             .AsEnumerable().Select(r => new Product
             {
-                Id=Convert.ToInt32(r["id"]), Name=r["Наименование"].ToString()!,
-                Image=r["Изображение"].ToString()!, Category=r["Категория"].ToString()!,
-                Manufacture=r["Производство"].ToString()!, Composition=r["Состав"].ToString()!,
-                Description=r["Описание"].ToString()!, BasePrice=Convert.ToDecimal(r["Цена"]),
-                TotalCount=Convert.ToInt32(r["total_count"]), Discounted=Convert.ToInt32(r["discounted"])==1
+                Id = Convert.ToInt32(r["id"]),
+                Name = r["Наименование"].ToString()!,
+                Image = r["Изображение"].ToString()!,
+                Category = r["Категория"].ToString()!,
+                Subcategory = r["Подкатегория"].ToString()!,
+                Manufacture = r["Производство"].ToString()!,
+                Composition = r["Состав"].ToString()!,
+                Description = r["Описание"].ToString()!,
+                BasePrice = Convert.ToDecimal(r["Цена"]),
+                TotalCount = Convert.ToInt32(r["total_count"]),
+                Discounted = Convert.ToInt32(r["discounted"]) == 1
             }).ToList();
     }
 
@@ -78,13 +86,39 @@ public static class DBHelper
     public static DataTable Users() => Query(@"SELECT CAST(id AS int) AS id,
         CONCAT([Фамилия],' ',[Имя],' ',[Отчество]) AS ФИО FROM Users ORDER BY ФИО");
 
-    public static DataTable OrderItems(int id) => Query(@"SELECT si.id AS StockItemId,
-        p.[Наименование] AS Товар, m.[Производство], s.[Размер], SUM(os.[Количество]) AS [Количество],
-        os.[Цена] AS [Цена за ед.], os.[Скидка] AS [Скидка, %], SUM(os.[Количество])*os.[Цена] AS Сумма
+    public static DataTable OrderItems(int id) => Query(@"SELECT si.id AS id_stock_items,
+        p.[Наименование], m.[Производство], s.[Размер], SUM(os.[Количество]) AS [Количество],
+        os.[Цена], os.[Скидка], SUM(os.[Количество])*os.[Цена] AS Сумма
         FROM Order_stock os JOIN Stock_items si ON os.id_stock_items=si.id
         JOIN Products p ON si.id_tovar=p.id JOIN Sizes s ON si.id_sizes=s.id
         LEFT JOIN Manufactures m ON p.id_manufactures=m.id WHERE os.id_order=@id
         GROUP BY si.id,p.[Наименование],m.[Производство],s.[Размер],os.[Цена],os.[Скидка]", ("@id", id));
+
+    public static string[] Categories() => Query("SELECT [Категория] FROM Categories ORDER BY [Категория]")
+        .AsEnumerable().Select(r => r[0].ToString()!).ToArray();
+
+    public static void ChangeQuantity(int orderId, int stockId, int count)
+    {
+        if (count <= 0)
+            throw new InvalidOperationException("Количество должно быть целым положительным числом.");
+        using var conn = GetConnection();
+        conn.Open();
+        using var tx = conn.BeginTransaction();
+        using var read = Command(conn, tx, @"SELECT os.[Количество] FROM Orders_import o WITH (UPDLOCK)
+            JOIN Order_stock os ON os.id_order=o.id WHERE o.id=@order AND os.id_stock_items=@stock",
+            ("@order", orderId), ("@stock", stockId));
+        var previous = read.ExecuteScalar();
+        if (previous == null)
+            throw new InvalidOperationException("Позиция уже удалена. Обновите состав заказа.");
+        var difference = count - Convert.ToInt32(previous);
+        using var update = Command(conn, tx, @"UPDATE Stock_items SET count=count-@difference
+            WHERE id=@stock AND (@difference<=0 OR count>=@difference);
+            IF @@ROWCOUNT=0 THROW 50003, N'Недостаточно товара на складе. Уменьшите количество.', 1;
+            UPDATE Order_stock SET [Количество]=@count WHERE id_order=@order AND id_stock_items=@stock",
+            ("@difference", difference), ("@stock", stockId), ("@count", count), ("@order", orderId));
+        update.ExecuteNonQuery();
+        tx.Commit();
+    }
 
     public static int SaveOrder(int? orderId, int userId, DateTime date, IReadOnlyList<CartItem> items)
     {
@@ -97,7 +131,8 @@ public static class DBHelper
         if (orderId is { } existing)
         {
             using var check = Command(conn, tx, "SELECT id FROM Orders_import WITH (UPDLOCK) WHERE id=@id", ("@id", existing));
-            if (check.ExecuteScalar() == null) throw new InvalidOperationException("Заказ уже удалён. Обновите список заказов.");
+            if (check.ExecuteScalar() == null)
+                throw new InvalidOperationException("Заказ уже удалён. Обновите список заказов.");
             id = existing;
         }
         else
@@ -144,42 +179,48 @@ public static class DBHelper
         tx.Commit();
     }
 
-        public static UserInfo GetUserByLogin(string login)
+    public static UserInfo GetUserByLogin(string login)
+    {
+        using (var conn = new SqlConnection(connectionString))
         {
-            using (var conn = new SqlConnection(connectionString))
-            {
-                conn.Open();
-                string q = @"SELECT u.id, u.[Фамилия], u.[Имя], u.[Отчество], u.id_role
+            conn.Open();
+            string q = @"SELECT u.id, u.[Фамилия], u.[Имя], u.[Отчество], u.id_role
                      FROM Users u
                      WHERE u.[Логин] = @login";
-                using (var cmd = new SqlCommand(q, conn))
+            using (var cmd = new SqlCommand(q, conn))
+            {
+                cmd.Parameters.AddWithValue("@login", login);
+                using (var reader = cmd.ExecuteReader())
                 {
-                    cmd.Parameters.AddWithValue("@login", login);
-                    using (var reader = cmd.ExecuteReader())
+                    if (reader.Read())
                     {
-                        if (reader.Read())
+                        return new UserInfo
                         {
-                            return new UserInfo
-                            {
-                                Id = Convert.ToInt32(reader["id"]),
-                                LastName = reader["Фамилия"].ToString(),
-                                FirstName = reader["Имя"].ToString(),
-                                MiddleName = reader["Отчество"]?.ToString() ?? "",
-                                RoleId = Convert.ToInt32(reader["id_role"])
-                            };
-                        }
+                            Id = Convert.ToInt32(reader["id"]),
+                            LastName = reader["Фамилия"].ToString(),
+                            FirstName = reader["Имя"].ToString(),
+                            MiddleName = reader["Отчество"]?.ToString() ?? "",
+                            RoleId = Convert.ToInt32(reader["id_role"])
+                        };
                     }
                 }
             }
-            return null;
         }
+        return null;
+    }
 
     public class UserInfo
     {
-        public int Id { get; set; }
+        public int Id
+        {
+            get; set;
+        }
         public string LastName { get; set; } = "";
         public string FirstName { get; set; } = "";
         public string MiddleName { get; set; } = "";
-        public int RoleId { get; set; }
+        public int RoleId
+        {
+            get; set;
+        }
     }
 }

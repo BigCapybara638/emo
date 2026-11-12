@@ -11,15 +11,25 @@
             <Setter Property="Background" Value="#70B2AF" />
             <Setter Property="Padding" Value="14,7" />
             <Setter Property="Margin" Value="4" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
         </Style>
-        <Style TargetType="TextBlock"><Setter Property="Margin" Value="4" /></Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+        </Style>
         <Style TargetType="ComboBox"><Setter Property="Margin" Value="4" /></Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="ToolTip" Value="{Binding Content, RelativeSource={RelativeSource Self}}" />
+        </Style>
         <Style TargetType="DataGrid">
             <Setter Property="IsReadOnly" Value="True" />
             <Setter Property="CanUserAddRows" Value="False" />
             <Setter Property="SelectionMode" Value="Single" />
             <Setter Property="SelectionUnit" Value="FullRow" />
             <Setter Property="ColumnWidth" Value="*" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="ToolTip" Value="{Binding Content.Text, RelativeSource={RelativeSource Self}}" />
         </Style>
     </Application.Resources>
 </Application>

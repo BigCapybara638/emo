@@ -1,10 +1,14 @@
 <Window x:Class="emo.LoginWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Авторизация" Style="{StaticResource {x:Type Window}}"
-        Width="380" Height="260" ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Чудо Обувь — Авторизация" Style="{StaticResource {x:Type Window}}"
+        Width="380" Height="330" ResizeMode="NoResize" WindowStartupLocation="CenterScreen" Icon="Resources/icon.ico">
     <StackPanel Margin="20">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <Image Source="Resources/icon.ico" Width="48" Height="48" ToolTip="Логотип компании «Чудо Обувь»." />
+            <TextBlock Text="Чудо Обувь" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" />
+        </StackPanel>
         <TextBlock Text="Введите логин:" />
-        <TextBox x:Name="Login" Margin="4" />
-        <Button Content="Войти" Foreground="White" FontWeight="Bold" IsDefault="True" Click="SignIn" />
-        <Button Content="Войти как гость" Click="GuestSignIn" />
+        <TextBox x:Name="Login" ToolTip="Логин из списка пользователей. Пароль не требуется." Margin="4" />
+        <Button Content="Войти" ToolTip="Войти по указанному логину и получить доступ согласно своей роли." Foreground="White" FontWeight="Bold" IsDefault="True" Click="SignIn" />
+        <Button Content="Войти как гость" ToolTip="Просматривать каталог и карточки товаров без оформления заказов." Click="GuestSignIn" />
     </StackPanel>
 </Window>
