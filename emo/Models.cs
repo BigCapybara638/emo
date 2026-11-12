@@ -32,7 +32,7 @@ public class Product
         var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", System.IO.Path.GetFileName(name));
         return System.IO.File.Exists(path) ? path : System.IO.Path.Combine(AppContext.BaseDirectory, "Resources", "picture.png");
     }
-    public string PriceText => Discounted ? $"{Price:N2} ₽  •  скидка 25% (было {BasePrice:N2} ₽)" : $"{Price:N2} ₽";
+    public string PriceText => Discounted ? $"{Price:N2} ₽  •  скидка 25%" : $"{Price:N2} ₽";
 }
 
 public record ComboBoxItem(int Value, string Size, int MaxCount)

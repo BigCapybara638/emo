@@ -14,6 +14,12 @@ public partial class LoginWindow : Window
         Loaded += (_, _) => Login.Focus();
     }
 
+    private void GuestSignIn(object sender, RoutedEventArgs e)
+    {
+        UserFIO = "Гость";
+        DialogResult = true;
+    }
+
     private void SignIn(object sender, RoutedEventArgs e)
     {
         string login = Login.Text.Trim();

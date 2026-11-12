@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private int userId, role;
     private bool Staff => role is 1 or 2;
     private bool Admin => role == 1;
+    private bool Guest => userId == 0;
 
     public MainWindow()
     {
@@ -77,7 +78,7 @@ public partial class MainWindow : Window
         reserved = pending ?? cart;
         Page(0, select == null ? "Каталог" : "Выбор товара в заказ");
         OrdersButton.Visibility = Staff && select == null ? Visibility.Visible : Visibility.Collapsed;
-        CartButton.Visibility = select == null ? Visibility.Visible : Visibility.Collapsed;
+        CartButton.Visibility = select == null && !Guest ? Visibility.Visible : Visibility.Collapsed;
         products = DBHelper.LoadProducts();
         var category = Category.SelectedItem as string;
         Category.ItemsSource = new[] { "Все категории" }.Concat(products.Select(p => p.Category).Distinct().Order());
@@ -119,7 +120,8 @@ public partial class MainWindow : Window
         SizeChoice.SelectedIndex = 0;
         Quantity.Text = "1";
         AddButton.Content = select == null ? "В корзину" : "Добавить в заказ";
-        BuyButton.Visibility = select == null ? Visibility.Visible : Visibility.Collapsed;
+        AddButton.Visibility = Guest ? Visibility.Collapsed : Visibility.Visible;
+        BuyButton.Visibility = select == null && !Guest ? Visibility.Visible : Visibility.Collapsed;
         AddButton.IsEnabled = BuyButton.IsEnabled = SizeChoice.Items.Count > 0;
     }
 
@@ -139,6 +141,7 @@ public partial class MainWindow : Window
 
     private void AddItem(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (Guest) return;
         var item = SelectedItem(true);
         if (pick == null) cart.Add(item);
         else pick(item);
@@ -148,12 +151,14 @@ public partial class MainWindow : Window
 
     private void BuyNow(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (Guest) return;
         var draft = new OrderDraft { UserId = userId, Items = [SelectedItem(false)] };
         Go(() => ShowOrder(draft));
     });
 
     private void OpenCart(object sender, RoutedEventArgs e)
     {
+        if (Guest) return;
         var draft = new OrderDraft { UserId = userId, Items = cart, FromCart = true };
         Go(() => ShowOrder(draft));
     }
@@ -238,6 +243,7 @@ public partial class MainWindow : Window
 
     private void ChooseItem(object sender, RoutedEventArgs e)
     {
+        if (Guest) return;
         var draft = order;
         draft.Date = OrderDate.SelectedDate ?? draft.Date;
         if (Customer.SelectedValue is int selectedUser) draft.UserId = selectedUser;
@@ -250,6 +256,7 @@ public partial class MainWindow : Window
 
     private void RemoveItem(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (Guest) return;
         if (Items.SelectedIndex < 0) throw new InvalidOperationException("Выберите позицию в таблице.");
         if (order.Id is { } id)
         {
@@ -268,6 +275,7 @@ public partial class MainWindow : Window
 
     private void SaveOrder(object sender, RoutedEventArgs e) => Run(() =>
     {
+        if (Guest) return;
         if (OrderDate.SelectedDate is not DateTime date || Customer.SelectedValue is not int customer)
             throw new InvalidOperationException("Выберите корректную дату и клиента из списка.");
         if (!Confirm(order.Id == null ? "Подтвердить оформление заказа?" : "Сохранить дату заказа?")) return;

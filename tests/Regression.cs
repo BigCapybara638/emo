@@ -50,6 +50,7 @@ internal static class Regression
             Check(Pricing.PreviousMonth(new DateTime(2024, 3, 15)) == (new DateTime(2024, 2, 1), new DateTime(2024, 3, 1)), "leap February range");
             Check(Pricing.Apply(99.99m, true) == 74.99m, "discount rounds to kopecks");
             Check(new Product { BasePrice = 100, Discounted = true }.PriceText.Contains("25%"), "card labels discount");
+            Check(!new Product { BasePrice = 100, Discounted = true }.PriceText.Contains("было"), "card omits previous price");
             Reset();
             var p = DBHelper.LoadProducts(1).Single();
             int order = DBHelper.SaveOrder(null, 3, DateTime.Today, [Item(price: p.Price)]);
@@ -143,6 +144,26 @@ internal static class Regression
             Check(draft.Items.Single().Price == selected.Price && Control<Button>(window, "BuyButton").Visibility == Visibility.Collapsed,
                 "catalog selection adds quoted item to new-order draft");
             window.Close();
+            var guestLogin = new LoginWindow();
+            typeof(LoginWindow).GetProperty("UserFIO")!.SetValue(guestLogin, "Гость");
+            var guest = new MainWindow();
+            guest.StartSession(guestLogin);
+            Check(Control<Button>(guest, "CartButton").Visibility == Visibility.Collapsed
+                && Control<Button>(guest, "OrdersButton").Visibility == Visibility.Collapsed,
+                "guest has no cart or order-management navigation");
+            Control<ListBox>(guest, "Products").SelectedIndex = 0;
+            Check(Control<TabControl>(guest, "Pages").SelectedIndex == 1
+                && Control<Button>(guest, "AddButton").Visibility == Visibility.Collapsed
+                && Control<Button>(guest, "BuyButton").Visibility == Visibility.Collapsed,
+                "guest can view product but cannot order");
+            var beforeOrders = Scalar("SELECT COUNT(*) FROM Orders_import");
+            foreach (var handler in new[] { "AddItem", "BuyNow", "OpenCart", "ChooseItem", "SaveOrder", "RemoveItem" })
+                Call(guest, handler, null, null);
+            Check(Control<TabControl>(guest, "Pages").SelectedIndex == 1
+                && Scalar("SELECT COUNT(*) FROM Orders_import") == beforeOrders,
+                "guest order handlers do not change orders or navigate to checkout");
+            guest.Close();
+            guestLogin.Close();
             bool onlyLogin = false;
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             timer.Tick += (_, _) =>
