@@ -14,7 +14,17 @@
             <TabItem>
                 <DockPanel Margin="10">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                        <TextBox x:Name="Search" Width="240" Margin="4" ToolTip="Поиск по названию и описанию" TextChanged="Filter" />
+                        <Grid Width="240" Margin="4">
+                            <TextBox x:Name="Search" Padding="8,5" VerticalContentAlignment="Center" ToolTip="Поиск по названию, описанию и составу" TextChanged="Filter" />
+                            <TextBlock Text="Поиск" Margin="10,0" Foreground="Gray" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=Search}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                         <ComboBox x:Name="Category" ToolTip="Фильтр по категории. «Все категории» отключает фильтрацию." Width="210" SelectionChanged="Filter" />
                         <ComboBox x:Name="Sort" ToolTip="Сортировка по цене со скидкой сохраняется при поиске и фильтрации." Width="210" SelectedIndex="0" SelectionChanged="Filter">
                             <ComboBoxItem Content="Цена: по возрастанию" />
@@ -23,25 +33,40 @@
                         <Button x:Name="CartButton" ToolTip="Просмотреть выбранные позиции, изменить количество и подтвердить заказ." Content="Корзина" Click="OpenCart" />
                         <Button x:Name="OrdersButton" ToolTip="Открыть список заказов. Доступно менеджеру и администратору." Content="Заказы" Click="OpenOrders" />
                     </StackPanel>
-                    <ListBox x:Name="Products" ToolTip="Выберите модель обуви, чтобы открыть описание, размеры и доступные действия." SelectionChanged="SelectProduct" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox x:Name="Products" BorderThickness="0" SelectionChanged="SelectProduct" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,4" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border ToolTip="{Binding Description}" Padding="10" Margin="0,3" BorderBrush="#70B2AF" BorderThickness="1">
+                                <Border Padding="12" BorderBrush="#70B2AF" BorderThickness="1">
                                     <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="White" />
                                         <Style.Triggers><DataTrigger Binding="{Binding LowStock}" Value="True"><Setter Property="Background" Value="#FF8080" /></DataTrigger></Style.Triggers>
                                     </Style></Border.Style>
-                                    <Grid MinHeight="130">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="240" /></Grid.ColumnDefinitions>
-                                        <Image Source="{Binding ImagePath}" Width="95" Height="100" />
-                                        <StackPanel Grid.Column="1">
-                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Manufacture, StringFormat=Производство: {0}}" />
-                                            <TextBlock Text="{Binding Category, StringFormat=Категория: {0}}" />
-                            <TextBlock Text="{Binding Subcategory, StringFormat=Подкатегория: {0}}" />
+                                    <Grid MinHeight="160">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="190" /></Grid.ColumnDefinitions>
+                                        <Border BorderBrush="#D2F6E7" BorderThickness="1" Margin="0,0,12,0" Padding="8">
+                                            <Image Source="{Binding ImagePath}" Stretch="Uniform" Height="140" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                            <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Category, StringFormat=Категория товара: {0}}" />
+                                            <TextBlock Text="{Binding Subcategory, StringFormat=Подкатегория: {0}}" />
+                                            <TextBlock Text="{Binding Description, StringFormat=Описание товара: {0}}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Manufacture, StringFormat=Производитель: {0}}" />
                                             <TextBlock Text="{Binding Composition, StringFormat=Состав: {0}}" TextWrapping="Wrap" />
                                             <TextBlock Text="{Binding CountText, StringFormat=Количество: {0}}" />
                                         </StackPanel>
-                                        <TextBlock Grid.Column="2" Text="{Binding PriceText}" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <Border Grid.Column="2" BorderBrush="#70B2AF" BorderThickness="1,0,0,0" Padding="12,0,0,0">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="Цена" />
+                                                <TextBlock Text="{Binding PriceText}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -58,7 +83,6 @@
                         <TextBlock Text="Количество:" VerticalAlignment="Center" />
                         <TextBox x:Name="Quantity" PreviewTextInput="OnlyDigits" DataObject.Pasting="PasteDigits" TextChanged="ValidateProductQuantity" ToolTip="Целое положительное количество пар выбранного размера." Text="1" Width="65" VerticalContentAlignment="Center" />
                         <Button x:Name="AddButton" ToolTip="Добавить выбранный размер и количество в корзину или текущий заказ." Content="В корзину" Click="AddItem" />
-                        <Button x:Name="BuyButton" ToolTip="Перейти к подтверждению заказа выбранного товара без корзины." Content="Оформить сразу" Click="BuyNow" />
                     </WrapPanel>
                         <TextBlock x:Name="QuantityHint" TextWrapping="Wrap" />
                     </StackPanel>
@@ -91,7 +115,7 @@
                 <DockPanel Margin="10">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                         <TextBlock Text="Дата:" VerticalAlignment="Center" />
-                        <DatePicker x:Name="OrderDate" ToolTip="Дата заказа. Дату существующего заказа может изменить только администратор." Width="150" Margin="4" />
+                        <DatePicker x:Name="OrderDate" SelectedDateChanged="OrderDateChanged" ToolTip="Дата заказа сохраняется автоматически. Изменение оформленного заказа доступно администратору." Width="150" Margin="4" />
                         <TextBlock Text="Клиент:" VerticalAlignment="Center" />
                         <ComboBox x:Name="Customer" ToolTip="Фамилия, имя и отчество клиента. При создании заказа сотрудник выбирает клиента из списка." Width="400" DisplayMemberPath="ФИО" SelectedValuePath="id" />
                     </StackPanel>
@@ -102,12 +126,12 @@
                             <TextBox x:Name="LineQuantity" Width="80" Margin="4" VerticalContentAlignment="Center"
                                      ToolTip="Новое целое положительное количество пар выбранной позиции."
                                      PreviewTextInput="OnlyDigits" DataObject.Pasting="PasteDigits" />
-                            <Button x:Name="ChangeQuantityButton" Content="Изменить количество" Click="ChangeQuantity" ToolTip="Сначала выберите позицию. Изменение количества пересчитает остаток на складе." />
+                            <Button x:Name="ChangeQuantityButton" Content="Применить количество" Click="ChangeQuantity" ToolTip="Сначала выберите позицию. Изменение количества пересчитает остаток на складе." />
                         </WrapPanel>
                         <WrapPanel>
                             <Button Content="Добавить товар из каталога" ToolTip="Открыть общий каталог с поиском и выбрать товар, размер и количество." Click="ChooseItem" />
                             <Button x:Name="RemoveButton" ToolTip="Удалить выбранную позицию. Для оформленного заказа товар вернётся на склад." Content="Удалить позицию" Click="RemoveItem" />
-                            <Button x:Name="SaveButton" ToolTip="Подтвердить новый заказ или сохранить дату существующего заказа (администратор)." Content="Подтвердить заказ" Click="SaveOrder" />
+                            <Button x:Name="SaveButton" ToolTip="Подтвердить оформление нового заказа." Content="Подтвердить заказ" Click="SaveOrder" />
                         </WrapPanel>
                     </StackPanel>
                     <DataGrid SelectionChanged="SelectLine" x:Name="Items" ToolTip="Выберите позицию заказа для изменения количества или удаления." AutoGeneratingColumn="GenerateColumn" />

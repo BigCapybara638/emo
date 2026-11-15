@@ -17,6 +17,8 @@ public partial class MainWindow : Window
     private Product product = new();
     private OrderDraft order = new();
     private int userId, role;
+    private bool loadingOrder;
+    private readonly Dictionary<DataGrid, Dictionary<string, string>> columnFilters = new();
     private bool Staff => role is 1 or 2;
     private bool Admin => role == 1;
     private bool Guest => userId == 0;
@@ -131,7 +133,6 @@ public partial class MainWindow : Window
         Quantity.Text = "1";
         AddButton.Content = select == null ? "В корзину" : "Добавить в заказ";
         AddButton.Visibility = Guest ? Visibility.Collapsed : Visibility.Visible;
-        BuyButton.Visibility = select == null && !Guest ? Visibility.Visible : Visibility.Collapsed;
         ValidateProductQuantity(this, new RoutedEventArgs());
     }
 
@@ -167,14 +168,6 @@ public partial class MainWindow : Window
         ShowProduct(product.Id, pick, reserved);
     });
 
-    private void BuyNow(object sender, RoutedEventArgs e) => Run(() =>
-    {
-        if (Guest)
-            return;
-        var draft = new OrderDraft { UserId = userId, Items = [SelectedItem(false)] };
-        Go(() => ShowOrder(draft));
-    });
-
     private void OpenCart(object sender, RoutedEventArgs e)
     {
         if (Guest)
@@ -194,6 +187,7 @@ public partial class MainWindow : Window
         Page(2, "Заказы");
         Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата_заказа], u.[Фамилия], u.[Имя], u.[Отчество]
             FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата_заказа] DESC").DefaultView;
+        ApplyGridFilters(Orders);
     }
 
     private int SelectedOrderId() => Orders.SelectedItem is DataRowView row ? Convert.ToInt32(row["id"])
@@ -239,16 +233,41 @@ public partial class MainWindow : Window
             draft.Date = Convert.ToDateTime(row["Дата_заказа"]);
             draft.UserId = Convert.ToInt32(row["id_user"]);
         }
-        OrderDate.SelectedDate = draft.Date;
+        loadingOrder = true;
+        try { OrderDate.SelectedDate = draft.Date; }
+        finally { loadingOrder = false; }
         OrderDate.IsEnabled = draft.Id == null ? draft.ChooseUser && Staff : Admin;
         Customer.ItemsSource = DBHelper.Users().DefaultView;
         Customer.SelectedValue = draft.UserId;
         Customer.IsEnabled = draft.Id == null && draft.ChooseUser && Staff;
-        SaveButton.Content = draft.Id == null ? "Подтвердить заказ" : "Сохранить дату";
-        SaveButton.Visibility = draft.Id == null || Admin ? Visibility.Visible : Visibility.Collapsed;
+        SaveButton.Visibility = draft.Id == null ? Visibility.Visible : Visibility.Collapsed;
         RemoveButton.Visibility = draft.Id == null || Admin ? Visibility.Visible : Visibility.Collapsed;
         QuantityEditor.Visibility = RemoveButton.Visibility;
         RefreshItems();
+    }
+
+    private void OrderDateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (loadingOrder || OrderDate.SelectedDate is not DateTime date || date == order.Date)
+            return;
+        if (order.Id is { } id)
+        {
+            if (!Admin || Guest)
+                return;
+            try
+            {
+                DBHelper.Execute("UPDATE Orders_import SET [Дата_заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
+            }
+            catch (Exception ex)
+            {
+                loadingOrder = true;
+                try { OrderDate.SelectedDate = order.Date; }
+                finally { loadingOrder = false; }
+                MessageBox.Show(ex.Message, "Не удалось сохранить дату", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+        }
+        order.Date = date;
     }
 
     private void RefreshItems()
@@ -273,6 +292,7 @@ public partial class MainWindow : Window
             Items.ItemsSource = table.DefaultView;
             Total.Text = $"Итого: {order.Items.Sum(i => i.Total):N2} ₽";
         }
+        ApplyGridFilters(Items);
         RemoveButton.IsEnabled = ChangeQuantityButton.IsEnabled = Items.SelectedItem != null;
         SaveButton.IsEnabled = order.Id != null || order.Items.Count > 0;
     }
@@ -319,56 +339,84 @@ public partial class MainWindow : Window
 
     private void SaveOrder(object sender, RoutedEventArgs e) => Run(() =>
     {
-        if (Guest)
+        if (Guest || order.Id != null)
             return;
         if (OrderDate.SelectedDate is not DateTime date || Customer.SelectedValue is not int customer)
             throw new InvalidOperationException("Выберите корректную дату и клиента из списка.");
-        if (!Confirm(order.Id == null ? "Подтвердить оформление заказа?" : "Сохранить дату заказа?"))
+        if (!Confirm("Подтвердить оформление заказа?"))
             return;
-        if (order.Id is { } id)
-        {
-            if (!Admin)
-                return;
-            DBHelper.Execute("UPDATE Orders_import SET [Дата_заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
-            order.Date = date;
-        }
-        else
-        {
-            order.Id = DBHelper.SaveOrder(null, customer, date, order.Items);
-            if (order.FromCart)
-                cart.Clear();
-            Info("Заказ оформлен.");
-            Back();
-        }
+        order.Id = DBHelper.SaveOrder(null, customer, date, order.Items);
+        if (order.FromCart)
+            cart.Clear();
+        Info("Заказ оформлен.");
+        Back();
     });
 
     private void GenerateColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
     {
-        e.Cancel = e.PropertyName is "id" or "id_stock_items" or "Index";
+        e.Cancel = e.PropertyName is "id" or "id_stock_items" or "Index" or "Скидка";
+        if (e.Cancel)
+            return;
         e.Column.MinWidth = e.PropertyName == "Наименование" ? 240 : e.PropertyName == "Производство" ? 150 : 100;
-        var style = new Style(typeof(System.Windows.Controls.Primitives.DataGridColumnHeader));
-        style.Setters.Add(new Setter(ToolTipProperty, e.PropertyName switch
-        {
-            "Наименование" => "Название модели обуви.",
-            "Цена" => "Сохранённая цена за одну пару со скидкой, в рублях.",
-            "Количество" => "Количество пар выбранной модели и размера.",
-            "Размер" => "Размер обуви выбранной позиции.",
-            "Скидка" => "Процент скидки при оформлении позиции.",
-            "Сумма" => "Цена одной пары, умноженная на количество.",
-            "Дата_заказа" => "Дата оформления заказа.",
-            "Производство" => "Производитель модели обуви.",
-            "Фамилия" => "Фамилия клиента.",
-            "Имя" => "Имя клиента.",
-            "Отчество" => "Отчество клиента.",
-            _ => "Фамилия, имя и отчество клиента заказа."
-        }));
-        e.Column.HeaderStyle = style;
+        var grid = (DataGrid)sender;
+        var header = new FrameworkElementFactory(typeof(StackPanel));
+        var label = new FrameworkElementFactory(typeof(TextBlock));
+        label.SetBinding(TextBlock.TextProperty, new Binding());
+        header.AppendChild(label);
+        var filter = new FrameworkElementFactory(typeof(TextBox));
+        filter.SetValue(FrameworkElement.MarginProperty, new Thickness(4));
+        filter.SetValue(FrameworkElement.MinWidthProperty, 70d);
+        filter.SetValue(ToolTipProperty, "Фильтр столбца. Очистите поле, чтобы показать все значения.");
+        filter.SetValue(FrameworkElement.TagProperty, (grid, e.PropertyName));
+        filter.SetValue(TextBox.TextProperty, columnFilters.TryGetValue(grid, out var filters)
+            ? filters.GetValueOrDefault(e.PropertyName, "") : "");
+        filter.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(ColumnFilterChanged));
+        header.AppendChild(filter);
+        e.Column.HeaderTemplate = new DataTemplate { VisualTree = header };
         if (e.Column is DataGridTextColumn column)
             column.Binding = new Binding(((DataGrid)sender).ItemsSource is DataView ? $"[{e.PropertyName}]" : e.PropertyName)
             {
-                StringFormat = e.PropertyName == "Размер" ? "0.#" : e.PropertyType == typeof(decimal) ? "N2" : null,
+                StringFormat = e.PropertyName == "Размер" ? "0.#" : e.PropertyType == typeof(DateTime) ? "dd.MM.yyyy" : e.PropertyType == typeof(decimal) ? "N2" : null,
                 ConverterCulture = System.Globalization.CultureInfo.GetCultureInfo("ru-RU")
             };
+    }
+
+    private void ColumnFilterChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox { Tag: ValueTuple<DataGrid, string> target } textBox)
+            SetColumnFilter(target.Item1, target.Item2, textBox.Text);
+        e.Handled = true;
+    }
+
+    private void SetColumnFilter(DataGrid grid, string column, string text)
+    {
+        if (!columnFilters.TryGetValue(grid, out var filters))
+            columnFilters[grid] = filters = new();
+        filters[column] = text;
+        ApplyGridFilters(grid);
+    }
+
+    private void ApplyGridFilters(DataGrid grid)
+    {
+        if (grid.ItemsSource is not DataView view || !columnFilters.TryGetValue(grid, out var filters))
+            return;
+        view.Table!.Locale = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+        view.RowFilter = string.Join(" AND ", filters.Where(f => !string.IsNullOrWhiteSpace(f.Value)
+            && view.Table.Columns.Contains(f.Key)).Select(f =>
+        {
+            if (view.Table.Columns[f.Key]!.DataType == typeof(decimal))
+            {
+                var numberText = string.Concat(f.Value.Where(c => !char.IsWhiteSpace(c)));
+                var culture = System.Globalization.CultureInfo.GetCultureInfo(numberText.Contains('.') && !numberText.Contains(',') ? "en-US" : "ru-RU");
+                if (decimal.TryParse(numberText, System.Globalization.NumberStyles.Number, culture, out var number))
+                    return $"[{f.Key}] = {number.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            }
+            var literal = string.Concat(f.Value.Trim().Select(c => c switch
+            {
+                '\'' => "''", '[' => "[[]", ']' => "[]]", '%' => "[%]", '*' => "[*]", _ => c.ToString()
+            }));
+            return $"Convert([{f.Key}], 'System.String') LIKE '%{literal}%'";
+        }));
     }
 
     private void Logout(object sender, RoutedEventArgs e)
@@ -411,17 +459,17 @@ public partial class MainWindow : Window
 
     private void ValidateProductQuantity(object sender, RoutedEventArgs e)
     {
-        if (AddButton == null || BuyButton == null || QuantityHint == null || SizeChoice == null)
+        if (AddButton == null || QuantityHint == null || SizeChoice == null)
             return;
         var size = SizeChoice.SelectedItem as ComboBoxItem;
         var countValid = int.TryParse(Quantity.Text, out int count) && count > 0;
         var pending = size == null ? 0 : reserved.Where(i => i.StockItemId == size.Value).Sum(i => (long)i.Count);
-        BuyButton.IsEnabled = countValid && size != null && count <= size.MaxCount;
-        AddButton.IsEnabled = BuyButton.IsEnabled && count + pending <= size!.MaxCount;
+        AddButton.IsEnabled = size != null && countValid;
         QuantityHint.Text = size == null ? "Нет доступных размеров. Выберите другую модель."
             : !countValid ? "Введите целое положительное количество пар."
             : $"Доступно {size.MaxCount} пар; уже выбрано в других позициях: {pending}.";
-        QuantityHint.Foreground = AddButton.IsEnabled ? System.Windows.Media.Brushes.DimGray : System.Windows.Media.Brushes.DarkRed;
+        QuantityHint.Foreground = countValid && size != null && count + pending <= size.MaxCount
+            ? System.Windows.Media.Brushes.DimGray : System.Windows.Media.Brushes.DarkRed;
     }
 
     private void PasteDigits(object sender, DataObjectPastingEventArgs e)

@@ -169,11 +169,17 @@ internal static class Regression
             Snapshot(window, "catalog");
             list.SelectedIndex = 0;
             Check(Control<TabControl>(window, "Pages").SelectedIndex == 1 && Control<Button>(window, "BackButton").IsEnabled, "catalog click opens product with Back");
+            Control<TextBox>(window, "Quantity").Text = "999999";
+            Check(Control<Button>(window, "AddButton").IsEnabled, "overstock quantity leaves add action available for error feedback");
+            bool quantityRejected = false;
+            try { Call(window, "SelectedItem", true); }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException) { quantityRejected = true; }
+            Check(quantityRejected, "overstock quantity is rejected before adding to cart");
             Control<TextBox>(window, "Quantity").Text = "0";
-            Check(!Control<Button>(window, "AddButton").IsEnabled && !Control<Button>(window, "BuyButton").IsEnabled,
+            Check(!Control<Button>(window, "AddButton").IsEnabled,
                 "zero quantity blocks ordering immediately");
             Control<TextBox>(window, "Quantity").Text = "2147483648";
-            Check(!Control<Button>(window, "BuyButton").IsEnabled, "quantity overflow blocks ordering");
+            Check(!Control<Button>(window, "AddButton").IsEnabled, "quantity overflow blocks ordering");
             Control<TextBox>(window, "Quantity").Text = "1";
             var paste = new DataObjectPastingEventArgs(new DataObject(DataFormats.UnicodeText, "-2"), false, DataFormats.UnicodeText);
             Call(window, "PasteDigits", Control<TextBox>(window, "Quantity"), paste);
@@ -183,10 +189,11 @@ internal static class Regression
             Check(Control<TabControl>(window, "Pages").SelectedIndex == 0 && Control<TextBox>(window, "Search").Text == "Кроссовки", "Back restores catalog filter");
             list.SelectedIndex = 0;
             Control<TextBox>(window, "Quantity").Text = "2";
-            Call(window, "BuyNow", null, null);
+            Field(window, "cart", new List<CartItem> { Item(count: 2) });
+            Call(window, "OpenCart", null, null);
             var direct = (OrderDraft)typeof(MainWindow).GetField("order", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
             Check(Control<TabControl>(window, "Pages").SelectedIndex == 3 && direct.Items.Single().Count == 2,
-                "buy now opens confirmation with selected quantity");
+                "cart opens confirmation with selected quantity");
             order = DBHelper.SaveOrder(null, 3, DateTime.Today, [Item()]);
             Call(window, "ShowOrder", new OrderDraft { Id = order });
             Check(Control<Button>(window, "SaveButton").Visibility == Visibility.Collapsed && Control<Button>(window, "RemoveButton").Visibility == Visibility.Collapsed, "manager cannot edit date or delete positions");
@@ -195,8 +202,13 @@ internal static class Regression
             Field(window, "role", 1);
             Call(window, "ShowOrder", new OrderDraft { Id = order });
             Check(Control<DatePicker>(window, "OrderDate").IsEnabled && Control<Button>(window, "RemoveButton").Visibility == Visibility.Visible, "admin can edit existing order");
+            var changedDate = DateTime.Today.AddDays(-4);
+            Control<DatePicker>(window, "OrderDate").SelectedDate = changedDate;
+            Check(Convert.ToDateTime(DBHelper.Query("SELECT Дата_заказа FROM Orders_import WHERE id=@id", ("@id", order)).Rows[0][0]) == changedDate,
+                "admin date selection immediately persists without a save action");
             Snapshot(window, "order");
             var grid = Control<DataGrid>(window, "Items");
+            Check(!grid.Columns.Any(c => c.Header.ToString() == "Скидка"), "order table presents final price without discount column");
             Check(new[] { "Наименование", "Производство", "Размер", "Количество", "Цена" }
                 .All(name => grid.Columns.Any(c => c.Header.ToString() == name)), "visible line headers match SQL field names");
             var priceColumn = grid.Columns.Single(c => c.Header.ToString() == "Цена");
@@ -223,8 +235,9 @@ internal static class Regression
             var selected = (CartItem)Call(window, "SelectedItem", true)!;
             var pick = (Action<CartItem>)typeof(MainWindow).GetField("pick", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
             pick(selected);
-            Check(draft.Items.Single().Price == selected.Price && Control<Button>(window, "BuyButton").Visibility == Visibility.Collapsed,
+            Check(draft.Items.Single().Price == selected.Price,
                 "catalog selection adds quoted item to new-order draft");
+            TestGridFilters(window);
             window.Close();
             var guestLogin = new LoginWindow();
             Check(Elements(guestLogin).OfType<Control>().Where(c => c is Button or TextBox).All(c => c.ToolTip != null),
@@ -237,11 +250,10 @@ internal static class Regression
                 "guest has no cart or order-management navigation");
             Control<ListBox>(guest, "Products").SelectedIndex = 0;
             Check(Control<TabControl>(guest, "Pages").SelectedIndex == 1
-                && Control<Button>(guest, "AddButton").Visibility == Visibility.Collapsed
-                && Control<Button>(guest, "BuyButton").Visibility == Visibility.Collapsed,
+                && Control<Button>(guest, "AddButton").Visibility == Visibility.Collapsed,
                 "guest can view product but cannot order");
             var beforeOrders = Scalar("SELECT COUNT(*) FROM Orders_import");
-            foreach (var handler in new[] { "AddItem", "BuyNow", "OpenCart", "ChooseItem", "SaveOrder", "RemoveItem", "ChangeQuantity" })
+            foreach (var handler in new[] { "AddItem", "OpenCart", "ChooseItem", "SaveOrder", "RemoveItem", "ChangeQuantity" })
                 Call(guest, handler, null, null);
             Check(Control<TabControl>(guest, "Pages").SelectedIndex == 1
                 && Scalar("SELECT COUNT(*) FROM Orders_import") == beforeOrders,
@@ -264,6 +276,60 @@ internal static class Regression
             return 0;
         }
         catch (Exception ex) { Console.WriteLine("FAIL " + ex); return 1; }
+    }
+
+    private static void TestGridFilters(MainWindow window)
+    {
+        foreach (var name in new[] { "Orders", "Items" })
+        {
+            var grid = Control<DataGrid>(window, name);
+            Call(window, "Page", name == "Orders" ? 2 : 3, "Проверка фильтров");
+            var table = new DataTable();
+            table.Columns.Add("Наименование", typeof(string));
+            table.Columns.Add("Количество", typeof(int));
+            table.Columns.Add("Дата_заказа", typeof(DateTime));
+            table.Columns.Add("Цена", typeof(decimal));
+            table.Rows.Add("Обувь O'Brien [100%]*", 2, new DateTime(2026, 11, 12), 1000m);
+            table.Rows.Add("Обувь обычная", 3, new DateTime(2026, 11, 13), 2190m);
+            table.Rows.Add("Другая модель", 2, new DateTime(2026, 11, 12), 1000.5m);
+            grid.ItemsSource = table.DefaultView;
+            grid.Measure(new Size(1080, 720));
+            grid.Arrange(new Rect(0, 0, 1080, 720));
+            grid.UpdateLayout();
+            Snapshot(window, "filters-" + name);
+            TextBox FilterBox(string column) => VisualElements(grid).OfType<TextBox>()
+                .Single(t => t.Tag is ValueTuple<DataGrid, string> target && target.Item2 == column);
+            var productFilter = FilterBox("Наименование");
+            var quantityFilter = FilterBox("Количество");
+            var dateFilter = FilterBox("Дата_заказа");
+            productFilter.Text = "обувь";
+            Check(grid.Items.Count == 2, name + $" header filters text case-insensitively (rows={grid.Items.Count}, filter={table.DefaultView.RowFilter})");
+            quantityFilter.Text = "2";
+            Check(grid.Items.Count == 1 && ((DataRowView)grid.Items[0])["Наименование"].ToString()!.Contains("O'Brien"),
+                name + " column filters combine with AND");
+            productFilter.Text = "O'Brien [100%]*";
+            Check(grid.Items.Count == 1, name + " filter treats quotes and wildcard characters literally");
+            productFilter.Text = "";
+            quantityFilter.Text = "";
+            dateFilter.Text = "12.11.2026";
+            Check(grid.Items.Count == 2, name + " date filter matches displayed Russian date");
+            table.DefaultView.Sort = "Количество DESC";
+            dateFilter.Text = "";
+            Check(grid.Items.Count == 3 && Convert.ToInt32(((DataRowView)grid.Items[0])["Количество"]) == 3,
+                name + " clearing filters restores rows and preserves sorting");
+            var priceFilter = FilterBox("Цена");
+            priceFilter.Text = "1\u00a0000,00";
+            Check(grid.Items.Count == 1 && Convert.ToDecimal(((DataRowView)grid.Items[0])["Цена"]) == 1000m,
+                name + " numeric filter accepts the displayed price with grouping and trailing zeroes");
+            priceFilter.Text = "";
+        }
+    }
+
+    private static IEnumerable<DependencyObject> VisualElements(DependencyObject root)
+    {
+        yield return root;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var child in VisualElements(VisualTreeHelper.GetChild(root, i))) yield return child;
     }
 
     private static void Snapshot(Window window, string name)
