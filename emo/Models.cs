@@ -13,10 +13,7 @@ public static class Pricing
 
 public class Product
 {
-    public int Id
-    {
-        get; set;
-    }
+    public int Id { get; set; }
     public string Image { get; set; } = "";
     public string Name { get; set; } = "";
     public string Category { get; set; } = "";
@@ -24,19 +21,10 @@ public class Product
     public string Manufacture { get; set; } = "";
     public string Composition { get; set; } = "";
     public string Description { get; set; } = "";
-    public decimal BasePrice
-    {
-        get; set;
-    }
-    public bool Discounted
-    {
-        get; set;
-    }
+    public decimal BasePrice { get; set; }
+    public bool Discounted { get; set; }
     public decimal Price => Pricing.Apply(BasePrice, Discounted);
-    public int TotalCount
-    {
-        get; set;
-    }
+    public int TotalCount { get; set; }
     public string CountText => TotalCount > 5 ? "много" : "мало";
     public bool LowStock => TotalCount <= 3;
     public string ImagePath => ResourcePath(Image);
@@ -55,48 +43,24 @@ public record ComboBoxItem(int Value, string Size, int MaxCount)
 
 public class CartItem
 {
-    public int StockItemId
-    {
-        get; set;
-    }
+    public int StockItemId { get; set; }
     public string ProductName { get; set; } = "";
     public string Manufacture { get; set; } = "";
     public string SizeName { get; set; } = "";
-    public int Count
-    {
-        get; set;
-    }
-    public decimal Price
-    {
-        get; set;
-    }
-    public int Discount
-    {
-        get; set;
-    }
+    public int Count { get; set; }
+    public decimal Price { get; set; }
+    public int Discount { get; set; }
     public decimal Total => Count * Price;
 }
 
 public class OrderDraft
 {
-    public int? Id
-    {
-        get; set;
-    }
-    public int UserId
-    {
-        get; set;
-    }
+    public int? Id { get; set; }
+    public int UserId { get; set; }
     public DateTime Date { get; set; } = DateTime.Today;
     public List<CartItem> Items { get; set; } = [];
-    public bool FromCart
-    {
-        get; set;
-    }
-    public bool ChooseUser
-    {
-        get; set;
-    }
+    public bool FromCart { get; set; }
+    public bool ChooseUser { get; set; }
 
     public void ChangeQuantity(int index, int count, int available)
     {

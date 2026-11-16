@@ -5,14 +5,8 @@ namespace emo;
 public partial class LoginWindow : Window
 {
     public string UserFIO { get; private set; } = "";
-    public int UserRole
-    {
-        get; private set;
-    }
-    public int UserId
-    {
-        get; private set;
-    }
+    public int UserRole { get; private set; }
+    public int UserId { get; private set; }
 
     public LoginWindow()
     {

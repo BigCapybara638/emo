@@ -22,17 +22,11 @@ public partial class MainWindow : Window
     private bool Admin => role == 1;
     private bool Guest => userId == 0;
 
-    public MainWindow()
-    {
-        InitializeComponent();
-    }
+    public MainWindow() => InitializeComponent();
 
     private static void Run(Action action)
     {
-        try
-        {
-            action();
-        }
+        try { action(); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Ошибка — проверьте данные и повторите действие", MessageBoxButton.OK, MessageBoxImage.Error); }
     }
 
@@ -44,8 +38,6 @@ public partial class MainWindow : Window
         userId = login.UserId;
         role = login.UserRole;
         UserName.Text = login.UserFIO;
-        cart.Clear();
-        history.Clear();
         show = () => ShowCatalog();
         Run(show);
     }
@@ -141,7 +133,7 @@ public partial class MainWindow : Window
         ValidateProductQuantity(this, new RoutedEventArgs());
     }
 
-    private CartItem SelectedItem(bool includePending)
+    private CartItem SelectedItem()
     {
         if (SizeChoice.SelectedItem is not ComboBoxItem size || !int.TryParse(Quantity.Text, out int count) || count <= 0)
             throw new InvalidOperationException("Выберите доступный размер и введите целое положительное количество пар.");
@@ -163,7 +155,7 @@ public partial class MainWindow : Window
     {
         if (Guest)
             return;
-        var item = SelectedItem(true);
+        var item = SelectedItem();
         if (pick == null)
             cart.Add(item);
         else
@@ -275,26 +267,18 @@ public partial class MainWindow : Window
 
     private void RefreshItems()
     {
-        if (order.Id is { } id)
+        var table = order.Id is { } id ? DBHelper.OrderItems(id) : new DataTable();
+        if (order.Id == null)
         {
-            var table = DBHelper.OrderItems(id);
-            Items.ItemsSource = table.DefaultView;
-            Total.Text = $"Итого: {table.AsEnumerable().Sum(r => Convert.ToDecimal(r["Сумма"])):N2} ₽";
-        }
-        else
-        {
-            var table = new DataTable();
             foreach (var (name, type) in new[] { ("Index", typeof(int)), ("id_stock_items", typeof(int)), ("Наименование товара", typeof(string)),
                 ("Производство", typeof(string)), ("Размер", typeof(string)), ("Количество", typeof(int)),
                 ("Цена", typeof(decimal)), ("Скидка", typeof(int)), ("Сумма", typeof(decimal)) })
                 table.Columns.Add(name, type);
             foreach (var (item, index) in order.Items.Select((item, index) => (item, index)))
-            {
                 table.Rows.Add(index, item.StockItemId, item.ProductName, item.Manufacture, item.SizeName, item.Count, item.Price, item.Discount, item.Total);
-            }
-            Items.ItemsSource = table.DefaultView;
-            Total.Text = $"Итого: {order.Items.Sum(i => i.Total):N2} ₽";
         }
+        Items.ItemsSource = table.DefaultView;
+        Total.Text = $"Итого: {table.AsEnumerable().Sum(r => Convert.ToDecimal(r["Сумма"])):N2} ₽";
         RemoveButton.IsEnabled = ChangeQuantityButton.IsEnabled = Items.SelectedItem != null;
         SaveButton.IsEnabled = order.Id != null || order.Items.Count > 0;
     }
@@ -327,7 +311,7 @@ public partial class MainWindow : Window
             if (!Admin || !Confirm("Удалить позицию из заказа и вернуть товар на склад?"))
                 return;
             var row = (DataRowView)Items.SelectedItem;
-            DBHelper.DeleteOrder(id, Convert.ToInt32(row["id_stock_items"]), Convert.ToDecimal(row["Цена"]), Convert.ToInt32(row["Скидка"]));
+            DBHelper.DeleteOrder(id, Convert.ToInt32(row["id_stock_items"]));
             if (DBHelper.OrderItems(id).Rows.Count == 0)
             {
                 Back();
@@ -363,7 +347,7 @@ public partial class MainWindow : Window
         e.Column.MinWidth = e.PropertyName == "Наименование товара" ? 240 : e.PropertyName == "Производство" ? 150 : 100;
         e.Column.Width = new DataGridLength(e.PropertyName == "Наименование товара" ? 3 : e.PropertyName == "Производство" ? 2 : 1, DataGridLengthUnitType.Star);
         if (e.Column is DataGridTextColumn column)
-            column.Binding = new Binding(((DataGrid)sender).ItemsSource is DataView ? $"[{e.PropertyName}]" : e.PropertyName)
+            column.Binding = new Binding($"[{e.PropertyName}]")
             {
                 StringFormat = e.PropertyName == "Размер" ? "0.#" : e.PropertyType == typeof(DateTime) ? "dd.MM.yyyy" : e.PropertyType == typeof(decimal) ? "N2" : null,
                 ConverterCulture = System.Globalization.CultureInfo.GetCultureInfo("ru-RU")
@@ -403,10 +387,7 @@ public partial class MainWindow : Window
         RefreshItems();
     });
 
-    private void OnlyDigits(object sender, TextCompositionEventArgs e)
-    {
-        e.Handled = !e.Text.All(char.IsAsciiDigit);
-    }
+    private void OnlyDigits(object sender, TextCompositionEventArgs e) => e.Handled = !e.Text.All(char.IsAsciiDigit);
 
     private void ValidateProductQuantity(object sender, RoutedEventArgs e)
     {

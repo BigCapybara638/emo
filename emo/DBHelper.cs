@@ -39,16 +39,6 @@ public static class DBHelper
         cmd.ExecuteNonQuery();
     }
 
-    public static decimal GetPriceWithDiscount(int productId, decimal basePrice)
-    {
-        var (start, end) = Pricing.PreviousMonth(DateTime.Now);
-        var rows = Query(@"SELECT TOP 1 1 FROM Order_stock os
-            JOIN Orders_import o ON os.id_order=o.id JOIN Stock_items si ON os.id_stock_items=si.id
-            WHERE si.id_tovar=@id AND o.[Дата заказа]>=@start AND o.[Дата заказа]<@end",
-            ("@id", productId), ("@start", start), ("@end", end));
-        return Pricing.Apply(basePrice, rows.Rows.Count == 0);
-    }
-
     public static List<Product> LoadProducts(int? id = null)
     {
         var (start, end) = Pricing.PreviousMonth(DateTime.Now);
@@ -87,13 +77,12 @@ public static class DBHelper
         CONCAT([Фамилия],' ',[Имя],' ',[Отчество]) AS ФИО FROM Users ORDER BY ФИО");
 
     public static DataTable OrderItems(int id) => Query(@"SELECT si.id AS id_stock_items,
-        p.[Наименование товара], m.[Производство], s.[Размер], SUM(os.[Количество]) AS [Количество],
-        quote.[Цена], quote.[Скидка], SUM(os.[Количество])*quote.[Цена] AS Сумма
+        p.[Наименование товара], m.[Производство], s.[Размер], os.[Количество],
+        quote.[Цена], quote.[Скидка], os.[Количество]*quote.[Цена] AS Сумма
         FROM Order_stock os JOIN Order_prices quote ON quote.id_order=os.id_order AND quote.id_stock_items=os.id_stock_items
         JOIN Stock_items si ON os.id_stock_items=si.id
         JOIN Products p ON si.id_tovar=p.id JOIN Sizes s ON si.id_sizes=s.id
-        LEFT JOIN Manufactures m ON p.id_manufactures=m.id WHERE os.id_order=@id
-        GROUP BY si.id,p.[Наименование товара],m.[Производство],s.[Размер],quote.[Цена],quote.[Скидка]", ("@id", id));
+        LEFT JOIN Manufactures m ON p.id_manufactures=m.id WHERE os.id_order=@id", ("@id", id));
 
     public static string[] Categories() => Query("SELECT [Категория] FROM Categories ORDER BY [Категория]")
         .AsEnumerable().Select(r => r[0].ToString()!).ToArray();
@@ -142,7 +131,7 @@ public static class DBHelper
                 OUTPUT INSERTED.id VALUES (@date,@user)", ("@date", date), ("@user", userId));
             id = Convert.ToInt32(create.ExecuteScalar());
         }
-        // Stock and price snapshots commit together; a stale cart cannot oversell.
+        // Заказ, сохранённая цена и списание остатков записываются одной транзакцией.
         foreach (var item in items.OrderBy(i => i.StockItemId))
         {
             using var stock = Command(conn, tx, @"UPDATE Stock_items SET count=count-@count
@@ -165,66 +154,32 @@ public static class DBHelper
         return id;
     }
 
-    public static void DeleteOrder(int id, int? stockId = null, decimal price = 0, int discount = 0)
+    public static void DeleteOrder(int id, int? stockId = null)
     {
         using var conn = GetConnection();
         conn.Open();
         using var tx = conn.BeginTransaction();
         using var cmd = Command(conn, tx, @"SELECT id FROM Orders_import WITH (UPDLOCK) WHERE id=@id;
-            UPDATE si SET count=count+r.n FROM Stock_items si JOIN
-                (SELECT id_stock_items,SUM([Количество]) n FROM Order_stock
-                 WHERE id_order=@id AND (@stock IS NULL OR id_stock_items=@stock)
-                 GROUP BY id_stock_items) r ON si.id=r.id_stock_items;
+            UPDATE si SET count=count+os.[Количество] FROM Stock_items si
+            JOIN Order_stock os ON si.id=os.id_stock_items
+            WHERE os.id_order=@id AND (@stock IS NULL OR si.id=@stock);
             DELETE FROM Order_stock WHERE id_order=@id
                 AND (@stock IS NULL OR id_stock_items=@stock);
             DELETE FROM Orders_import WHERE id=@id AND NOT EXISTS (SELECT 1 FROM Order_stock WHERE id_order=@id)",
-            ("@id", id), ("@stock", (object?)stockId ?? DBNull.Value), ("@price", price), ("@discount", discount));
+            ("@id", id), ("@stock", (object?)stockId ?? DBNull.Value));
         cmd.ExecuteNonQuery();
         tx.Commit();
     }
 
-    public static UserInfo GetUserByLogin(string login)
+    public static UserInfo? GetUserByLogin(string login)
     {
-        using (var conn = new SqlConnection(connectionString))
-        {
-            conn.Open();
-            string q = @"SELECT u.id, u.[Фамилия], u.[Имя], u.[Отчество], u.id_role
-                     FROM Users u
-                     WHERE u.[Логин] = @login";
-            using (var cmd = new SqlCommand(q, conn))
-            {
-                cmd.Parameters.AddWithValue("@login", login);
-                using (var reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return new UserInfo
-                        {
-                            Id = Convert.ToInt32(reader["id"]),
-                            LastName = reader["Фамилия"].ToString(),
-                            FirstName = reader["Имя"].ToString(),
-                            MiddleName = reader["Отчество"]?.ToString() ?? "",
-                            RoleId = Convert.ToInt32(reader["id_role"])
-                        };
-                    }
-                }
-            }
-        }
-        return null;
+        var rows = Query("SELECT * FROM Users WHERE [Логин]=@login", ("@login", login)).Rows;
+        if (rows.Count == 0)
+            return null;
+        var row = rows[0];
+        return new UserInfo(Convert.ToInt32(row["id"]), row["Фамилия"].ToString()!,
+            row["Имя"].ToString()!, row["Отчество"].ToString()!, Convert.ToInt32(row["id_role"]));
     }
 
-    public class UserInfo
-    {
-        public int Id
-        {
-            get; set;
-        }
-        public string LastName { get; set; } = "";
-        public string FirstName { get; set; } = "";
-        public string MiddleName { get; set; } = "";
-        public int RoleId
-        {
-            get; set;
-        }
-    }
+    public record UserInfo(int Id, string LastName, string FirstName, string MiddleName, int RoleId);
 }
