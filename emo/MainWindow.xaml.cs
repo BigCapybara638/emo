@@ -189,8 +189,8 @@ public partial class MainWindow : Window
     private void ShowOrders()
     {
         Page(2, "Заказы");
-        Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата_заказа], u.[Фамилия], u.[Имя], u.[Отчество]
-            FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата_заказа] DESC").DefaultView;
+        Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата заказа], u.[Фамилия], u.[Имя], u.[Отчество]
+            FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата заказа] DESC").DefaultView;
     }
 
     private int SelectedOrderId() => Orders.SelectedItem is DataRowView row ? Convert.ToInt32(row["id"])
@@ -229,11 +229,11 @@ public partial class MainWindow : Window
         Page(3, draft.Id is { } id ? $"Состав заказа №{id}" : draft.FromCart ? "Корзина" : "Новый заказ");
         if (draft.Id is { } existing)
         {
-            var header = DBHelper.Query("SELECT [Дата_заказа],id_user FROM Orders_import WHERE id=@id", ("@id", existing));
+            var header = DBHelper.Query("SELECT [Дата заказа],id_user FROM Orders_import WHERE id=@id", ("@id", existing));
             if (header.Rows.Count == 0)
                 throw new InvalidOperationException("Заказ уже удалён. Вернитесь кнопкой «Назад» к списку заказов.");
             var row = header.Rows[0];
-            draft.Date = Convert.ToDateTime(row["Дата_заказа"]);
+            draft.Date = Convert.ToDateTime(row["Дата заказа"]);
             draft.UserId = Convert.ToInt32(row["id_user"]);
         }
         loadingOrder = true;
@@ -259,7 +259,7 @@ public partial class MainWindow : Window
                 return;
             try
             {
-                DBHelper.Execute("UPDATE Orders_import SET [Дата_заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
+                DBHelper.Execute("UPDATE Orders_import SET [Дата заказа]=@date WHERE id=@id", ("@date", date), ("@id", id));
             }
             catch (Exception ex)
             {
@@ -284,7 +284,7 @@ public partial class MainWindow : Window
         else
         {
             var table = new DataTable();
-            foreach (var (name, type) in new[] { ("Index", typeof(int)), ("id_stock_items", typeof(int)), ("Наименование", typeof(string)),
+            foreach (var (name, type) in new[] { ("Index", typeof(int)), ("id_stock_items", typeof(int)), ("Наименование товара", typeof(string)),
                 ("Производство", typeof(string)), ("Размер", typeof(string)), ("Количество", typeof(int)),
                 ("Цена", typeof(decimal)), ("Скидка", typeof(int)), ("Сумма", typeof(decimal)) })
                 table.Columns.Add(name, type);
@@ -360,8 +360,8 @@ public partial class MainWindow : Window
         if (e.Cancel)
             return;
         e.Column.SortMemberPath = e.PropertyName;
-        e.Column.MinWidth = e.PropertyName == "Наименование" ? 240 : e.PropertyName == "Производство" ? 150 : 100;
-        e.Column.Width = new DataGridLength(e.PropertyName == "Наименование" ? 3 : e.PropertyName == "Производство" ? 2 : 1, DataGridLengthUnitType.Star);
+        e.Column.MinWidth = e.PropertyName == "Наименование товара" ? 240 : e.PropertyName == "Производство" ? 150 : 100;
+        e.Column.Width = new DataGridLength(e.PropertyName == "Наименование товара" ? 3 : e.PropertyName == "Производство" ? 2 : 1, DataGridLengthUnitType.Star);
         if (e.Column is DataGridTextColumn column)
             column.Binding = new Binding(((DataGrid)sender).ItemsSource is DataView ? $"[{e.PropertyName}]" : e.PropertyName)
             {

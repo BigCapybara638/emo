@@ -43,16 +43,16 @@ internal static class Regression
                 WHERE k.name='PK_Order_stock'") == 2, "order lines have a two-column primary key");
             Reset();
             int earlyOrder = DBHelper.SaveOrder(null, 3, new DateTime(1, 1, 1), [Item()]);
-            Check(Convert.ToDateTime(DBHelper.Query("SELECT Дата_заказа FROM Orders_import WHERE id=@id", ("@id", earlyOrder)).Rows[0][0]).Year == 1,
+            Check(Convert.ToDateTime(DBHelper.Query("SELECT [Дата заказа] FROM Orders_import WHERE id=@id", ("@id", earlyOrder)).Rows[0][0]).Year == 1,
                 "datetime2 date outside legacy datetime range is supported");
             var month = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
             foreach (var (date, expected) in new[] { (month.AddSeconds(-1), 100m), (month.AddMonths(-1), 100m),
                 (month, 75m), (month.AddMonths(-1).AddSeconds(-1), 75m) })
             {
                 Reset();
-                DBHelper.Execute(@"INSERT INTO Orders_import ([Дата_заказа],id_user) VALUES (@date,3);
-                    INSERT INTO Order_stock (id_order,id_stock_items,[Количество],[Цена],[Скидка])
-                    SELECT MAX(id),1,1,100,0 FROM Orders_import", ("@date", date));
+                DBHelper.Execute(@"INSERT INTO Orders_import ([Дата заказа],id_user) VALUES (@date,3);
+                    INSERT INTO Order_stock (id_order,id_stock_items,[Количество])
+                    SELECT MAX(id),1,1 FROM Orders_import", ("@date", date));
                 Check(DBHelper.GetPriceWithDiscount(1, 100m) == expected, $"discount boundary {date:yyyy-MM-dd HH:mm:ss}");
             }
             Check(Pricing.PreviousMonth(new DateTime(2027, 1, 5)) == (new DateTime(2026, 12, 1), new DateTime(2027, 1, 1)), "January crosses year");
@@ -84,7 +84,7 @@ internal static class Regression
             Check(overstock && Scalar("SELECT count FROM Stock_items WHERE id=1") == 18
                 && Convert.ToInt32(DBHelper.OrderItems(order).Rows[0]["Количество"]) == 2,
                 "invalid quantity rolls back stock and order line");
-            Check(DBHelper.OrderItems(order).Columns.Contains("Наименование") && !DBHelper.OrderItems(order).Columns.Contains("Товар"),
+            Check(DBHelper.OrderItems(order).Columns.Contains("Наименование товара") && !DBHelper.OrderItems(order).Columns.Contains("Товар"),
                 "order columns use schema names");
             DBHelper.Execute("UPDATE Products SET [Цена]=9999 WHERE id=1");
             Check(Convert.ToDecimal(DBHelper.OrderItems(order).Rows[0]["Цена"]) == p.Price, "price snapshot survives product repricing");
@@ -197,12 +197,12 @@ internal static class Regression
             Check(Control<DatePicker>(window, "OrderDate").IsEnabled && Control<Button>(window, "RemoveButton").Visibility == Visibility.Visible, "admin can edit existing order");
             var changedDate = DateTime.Today.AddDays(-4);
             Control<DatePicker>(window, "OrderDate").SelectedDate = changedDate;
-            Check(Convert.ToDateTime(DBHelper.Query("SELECT Дата_заказа FROM Orders_import WHERE id=@id", ("@id", order)).Rows[0][0]) == changedDate,
+            Check(Convert.ToDateTime(DBHelper.Query("SELECT [Дата заказа] FROM Orders_import WHERE id=@id", ("@id", order)).Rows[0][0]) == changedDate,
                 "admin date selection immediately persists without a save action");
             Snapshot(window, "order");
             var grid = Control<DataGrid>(window, "Items");
             Check(!grid.Columns.Any(c => c.Header.ToString() == "Скидка"), "order table presents final price without discount column");
-            Check(new[] { "Наименование", "Производство", "Размер", "Количество", "Цена" }
+            Check(new[] { "Наименование товара", "Производство", "Размер", "Количество", "Цена" }
                 .All(name => grid.Columns.Any(c => c.Header.ToString() == name)), "visible line headers match SQL field names");
             var priceColumn = grid.Columns.Single(c => c.Header.ToString() == "Цена");
             var priceText = ((TextBlock)priceColumn.GetCellContent(grid.Items[0])).Text;

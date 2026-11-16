@@ -44,7 +44,7 @@ public static class DBHelper
         var (start, end) = Pricing.PreviousMonth(DateTime.Now);
         var rows = Query(@"SELECT TOP 1 1 FROM Order_stock os
             JOIN Orders_import o ON os.id_order=o.id JOIN Stock_items si ON os.id_stock_items=si.id
-            WHERE si.id_tovar=@id AND o.[Дата_заказа]>=@start AND o.[Дата_заказа]<@end",
+            WHERE si.id_tovar=@id AND o.[Дата заказа]>=@start AND o.[Дата заказа]<@end",
             ("@id", productId), ("@start", start), ("@end", end));
         return Pricing.Apply(basePrice, rows.Rows.Count == 0);
     }
@@ -56,7 +56,7 @@ public static class DBHelper
             (SELECT COALESCE(SUM(count),0) FROM Stock_items WHERE id_tovar=p.id) AS total_count,
             CASE WHEN EXISTS (SELECT 1 FROM Order_stock os
                 JOIN Orders_import o ON os.id_order=o.id JOIN Stock_items si ON os.id_stock_items=si.id
-                WHERE si.id_tovar=p.id AND o.[Дата_заказа]>=@start AND o.[Дата_заказа]<@end)
+                WHERE si.id_tovar=p.id AND o.[Дата заказа]>=@start AND o.[Дата заказа]<@end)
                 THEN 0 ELSE 1 END AS discounted
             FROM Products p LEFT JOIN Categories c ON p.id_category=c.id
             LEFT JOIN Subcategories sub ON p.id_subcategory=sub.id
@@ -65,7 +65,7 @@ public static class DBHelper
             .AsEnumerable().Select(r => new Product
             {
                 Id = Convert.ToInt32(r["id"]),
-                Name = r["Наименование"].ToString()!,
+                Name = r["Наименование товара"].ToString()!,
                 Image = r["Изображение"].ToString()!,
                 Category = r["Категория"].ToString()!,
                 Subcategory = r["Подкатегория"].ToString()!,
@@ -87,12 +87,13 @@ public static class DBHelper
         CONCAT([Фамилия],' ',[Имя],' ',[Отчество]) AS ФИО FROM Users ORDER BY ФИО");
 
     public static DataTable OrderItems(int id) => Query(@"SELECT si.id AS id_stock_items,
-        p.[Наименование], m.[Производство], s.[Размер], SUM(os.[Количество]) AS [Количество],
-        os.[Цена], os.[Скидка], SUM(os.[Количество])*os.[Цена] AS Сумма
-        FROM Order_stock os JOIN Stock_items si ON os.id_stock_items=si.id
+        p.[Наименование товара], m.[Производство], s.[Размер], SUM(os.[Количество]) AS [Количество],
+        quote.[Цена], quote.[Скидка], SUM(os.[Количество])*quote.[Цена] AS Сумма
+        FROM Order_stock os JOIN Order_prices quote ON quote.id_order=os.id_order AND quote.id_stock_items=os.id_stock_items
+        JOIN Stock_items si ON os.id_stock_items=si.id
         JOIN Products p ON si.id_tovar=p.id JOIN Sizes s ON si.id_sizes=s.id
         LEFT JOIN Manufactures m ON p.id_manufactures=m.id WHERE os.id_order=@id
-        GROUP BY si.id,p.[Наименование],m.[Производство],s.[Размер],os.[Цена],os.[Скидка]", ("@id", id));
+        GROUP BY si.id,p.[Наименование товара],m.[Производство],s.[Размер],quote.[Цена],quote.[Скидка]", ("@id", id));
 
     public static string[] Categories() => Query("SELECT [Категория] FROM Categories ORDER BY [Категория]")
         .AsEnumerable().Select(r => r[0].ToString()!).ToArray();
@@ -137,7 +138,7 @@ public static class DBHelper
         }
         else
         {
-            using var create = Command(conn, tx, @"INSERT INTO Orders_import ([Дата_заказа],id_user)
+            using var create = Command(conn, tx, @"INSERT INTO Orders_import ([Дата заказа],id_user)
                 OUTPUT INSERTED.id VALUES (@date,@user)", ("@date", date), ("@user", userId));
             id = Convert.ToInt32(create.ExecuteScalar());
         }
@@ -148,12 +149,15 @@ public static class DBHelper
                 WHERE id=@stock AND count>=@count", ("@count", item.Count), ("@stock", item.StockItemId));
             if (stock.ExecuteNonQuery() != 1)
                 throw new InvalidOperationException($"Недостаточно товара «{item.ProductName}», размер {item.SizeName}. Обновите каталог и уменьшите количество.");
-            using var line = Command(conn, tx, @"IF EXISTS (SELECT 1 FROM Order_stock
+            using var line = Command(conn, tx, @"IF EXISTS (SELECT 1 FROM Order_prices
                 WHERE id_order=@order AND id_stock_items=@stock AND ([Цена]<>@price OR [Скидка]<>@discount))
                 THROW 50002, N'Эта позиция уже есть в заказе по другой цене. Оформите её отдельным заказом.', 1;
                 UPDATE Order_stock SET [Количество]=[Количество]+@count WHERE id_order=@order AND id_stock_items=@stock;
-                IF @@ROWCOUNT=0 INSERT INTO Order_stock (id_order,id_stock_items,[Количество],[Цена],[Скидка])
-                    VALUES (@order,@stock,@count,@price,@discount)", ("@order", id), ("@stock", item.StockItemId),
+                IF @@ROWCOUNT=0
+                BEGIN
+                    INSERT INTO Order_stock (id_order,id_stock_items,[Количество]) VALUES (@order,@stock,@count);
+                    INSERT INTO Order_prices (id_order,id_stock_items,[Цена],[Скидка]) VALUES (@order,@stock,@price,@discount);
+                END", ("@order", id), ("@stock", item.StockItemId),
                 ("@count", item.Count), ("@price", item.Price), ("@discount", item.Discount));
             line.ExecuteNonQuery();
         }
@@ -169,10 +173,10 @@ public static class DBHelper
         using var cmd = Command(conn, tx, @"SELECT id FROM Orders_import WITH (UPDLOCK) WHERE id=@id;
             UPDATE si SET count=count+r.n FROM Stock_items si JOIN
                 (SELECT id_stock_items,SUM([Количество]) n FROM Order_stock
-                 WHERE id_order=@id AND (@stock IS NULL OR (id_stock_items=@stock AND [Цена]=@price AND [Скидка]=@discount))
+                 WHERE id_order=@id AND (@stock IS NULL OR id_stock_items=@stock)
                  GROUP BY id_stock_items) r ON si.id=r.id_stock_items;
             DELETE FROM Order_stock WHERE id_order=@id
-                AND (@stock IS NULL OR (id_stock_items=@stock AND [Цена]=@price AND [Скидка]=@discount));
+                AND (@stock IS NULL OR id_stock_items=@stock);
             DELETE FROM Orders_import WHERE id=@id AND NOT EXISTS (SELECT 1 FROM Order_stock WHERE id_order=@id)",
             ("@id", id), ("@stock", (object?)stockId ?? DBNull.Value), ("@price", price), ("@discount", discount));
         cmd.ExecuteNonQuery();
