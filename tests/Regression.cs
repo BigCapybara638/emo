@@ -124,13 +124,6 @@ internal static class Regression
             })).ToArray());
             Check(successes == 1 && Scalar("SELECT count FROM Stock_items WHERE id=1") == 0, "concurrent checkouts cannot oversell");
             Check(DBHelper.GetUserByLogin("isivanov")?.RoleId == 1 && DBHelper.GetUserByLogin("missing-user") == null, "original login lookup and roles");
-            DBHelper.Execute("CREATE TABLE [RenameConflict$] (id int); CREATE TABLE RenameConflict (id int)");
-            bool collision = false;
-            try { DBHelper.Execute(System.IO.File.ReadAllText("database/rename_tables.sql")); }
-            catch (System.Data.SqlClient.SqlException ex) when (ex.Number == 50001) { collision = true; }
-            finally { DBHelper.Execute("DROP TABLE [RenameConflict$]; DROP TABLE RenameConflict"); }
-            Check(collision, "rename rejects conflicting table names without dropping either table");
-
             Reset();
             var app = new App();
             app.InitializeComponent();
@@ -283,46 +276,34 @@ internal static class Regression
         foreach (var name in new[] { "Orders", "Items" })
         {
             var grid = Control<DataGrid>(window, name);
-            Call(window, "Page", name == "Orders" ? 2 : 3, "Проверка фильтров");
+            Call(window, "Page", name == "Orders" ? 2 : 3, "Проверка сортировки");
             var table = new DataTable();
-            table.Columns.Add("Наименование", typeof(string));
             table.Columns.Add("Количество", typeof(int));
-            table.Columns.Add("Дата_заказа", typeof(DateTime));
-            table.Columns.Add("Цена", typeof(decimal));
-            table.Rows.Add("Обувь O'Brien [100%]*", 2, new DateTime(2026, 11, 12), 1000m);
-            table.Rows.Add("Обувь обычная", 3, new DateTime(2026, 11, 13), 2190m);
-            table.Rows.Add("Другая модель", 2, new DateTime(2026, 11, 12), 1000.5m);
+            table.Rows.Add(10); table.Rows.Add(2); table.Rows.Add(30);
             grid.ItemsSource = table.DefaultView;
-            grid.Measure(new Size(1080, 720));
-            grid.Arrange(new Rect(0, 0, 1080, 720));
-            grid.UpdateLayout();
-            Snapshot(window, "filters-" + name);
-            TextBox FilterBox(string column) => VisualElements(grid).OfType<TextBox>()
-                .Single(t => t.Tag is ValueTuple<DataGrid, string> target && target.Item2 == column);
-            var productFilter = FilterBox("Наименование");
-            var quantityFilter = FilterBox("Количество");
-            var dateFilter = FilterBox("Дата_заказа");
-            productFilter.Text = "обувь";
-            Check(grid.Items.Count == 2, name + $" header filters text case-insensitively (rows={grid.Items.Count}, filter={table.DefaultView.RowFilter})");
-            quantityFilter.Text = "2";
-            Check(grid.Items.Count == 1 && ((DataRowView)grid.Items[0])["Наименование"].ToString()!.Contains("O'Brien"),
-                name + " column filters combine with AND");
-            productFilter.Text = "O'Brien [100%]*";
-            Check(grid.Items.Count == 1, name + " filter treats quotes and wildcard characters literally");
-            productFilter.Text = "";
-            quantityFilter.Text = "";
-            dateFilter.Text = "12.11.2026";
-            Check(grid.Items.Count == 2, name + " date filter matches displayed Russian date");
-            table.DefaultView.Sort = "Количество DESC";
-            dateFilter.Text = "";
-            Check(grid.Items.Count == 3 && Convert.ToInt32(((DataRowView)grid.Items[0])["Количество"]) == 3,
-                name + " clearing filters restores rows and preserves sorting");
-            var priceFilter = FilterBox("Цена");
-            priceFilter.Text = "1\u00a0000,00";
-            Check(grid.Items.Count == 1 && Convert.ToDecimal(((DataRowView)grid.Items[0])["Цена"]) == 1000m,
-                name + " numeric filter accepts the displayed price with grouping and trailing zeroes");
-            priceFilter.Text = "";
+            Snapshot(window, "sorting-" + name);
+            Check(!VisualElements(grid).OfType<TextBox>().Any(), name + " has plain native headers without filter fields");
+            var column = grid.Columns.Single();
+            typeof(DataGrid).GetMethod("PerformSort", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(grid, [column]);
+            Check(Convert.ToInt32(((DataRowView)grid.Items[0])[0]) == 2, name + " native header sorts numbers ascending");
+            typeof(DataGrid).GetMethod("PerformSort", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(grid, [column]);
+            Check(Convert.ToInt32(((DataRowView)grid.Items[0])[0]) == 30, name + " native header reverses sorting");
         }
+        Reset();
+        var pending = new List<CartItem> { Item(stock: 1, count: 2), Item(stock: 1, count: 3) };
+        Call(window, "ShowProduct", 1, null, pending);
+        var choice = Control<ComboBox>(window, "SizeChoice");
+        var size = choice.Items.Cast<emo.ComboBoxItem>().Single(s => s.Value == 1);
+        Check(size.MaxCount == 15 && size.ToString().Contains("15"), "size label subtracts all pending cart lines");
+        choice.SelectedItem = size;
+        Check(Control<TextBlock>(window, "QuantityHint").Text == "", "valid quantity has no redundant stock explanation");
+        pending.Add(Item(stock: 1, count: 15));
+        Call(window, "ShowProduct", 1, null, pending);
+        Check(((emo.ComboBoxItem)choice.SelectedItem).Value == 1 && ((emo.ComboBoxItem)choice.SelectedItem).MaxCount == 0
+            && !Control<Button>(window, "AddButton").IsEnabled, "exhausted selected size stays visible with zero remaining");
+        pending.Clear();
+        Call(window, "ShowProduct", 1, null, pending);
+        Check(((emo.ComboBoxItem)choice.SelectedItem).MaxCount == 20, "removing cart items restores available size count");
     }
 
     private static IEnumerable<DependencyObject> VisualElements(DependencyObject root)

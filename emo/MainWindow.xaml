@@ -43,30 +43,28 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="12" BorderBrush="#70B2AF" BorderThickness="1">
+                                <Border Padding="10" BorderBrush="#666666" BorderThickness="1">
                                     <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="White" />
                                         <Style.Triggers><DataTrigger Binding="{Binding LowStock}" Value="True"><Setter Property="Background" Value="#FF8080" /></DataTrigger></Style.Triggers>
                                     </Style></Border.Style>
-                                    <Grid MinHeight="160">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /><ColumnDefinition Width="190" /></Grid.ColumnDefinitions>
-                                        <Border BorderBrush="#D2F6E7" BorderThickness="1" Margin="0,0,12,0" Padding="8">
-                                            <Image Source="{Binding ImagePath}" Stretch="Uniform" Height="140" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
-                                            <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Category, StringFormat=Категория товара: {0}}" />
-                                            <TextBlock Text="{Binding Subcategory, StringFormat=Подкатегория: {0}}" />
-                                            <TextBlock Text="{Binding Description, StringFormat=Описание товара: {0}}" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Manufacture, StringFormat=Производитель: {0}}" />
-                                            <TextBlock Text="{Binding Composition, StringFormat=Состав: {0}}" TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding CountText, StringFormat=Количество: {0}}" />
-                                        </StackPanel>
-                                        <Border Grid.Column="2" BorderBrush="#70B2AF" BorderThickness="1,0,0,0" Padding="12,0,0,0">
-                                            <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="Цена" />
-                                                <TextBlock Text="{Binding PriceText}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
+                                    <Grid MinHeight="130">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="165" /><ColumnDefinition Width="*" /><ColumnDefinition Width="155" /></Grid.ColumnDefinitions>
+                                        <Image Source="{Binding ImagePath}" Stretch="Uniform" Height="130" Margin="0,0,18,0" />
+                                        <Grid Grid.Column="1" Grid.ColumnSpan="2">
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                                            <TextBlock TextWrapping="Wrap" TextAlignment="Center" FontSize="18" Margin="4,0,4,6">
+                                                <Run Text="{Binding Manufacture}" /><Run Text=" | " /><Run Text="{Binding Name}" />
+                                            </TextBlock>
+                                            <Grid Grid.Row="1">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="155" /></Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Category}" />
+                                                    <TextBlock Text="{Binding CountText, StringFormat=Количество: {0}}" />
+                                                    <TextBlock Text="{Binding Composition, StringFormat=Состав: {0}}" TextWrapping="Wrap" FontSize="14" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding Price, StringFormat={}{0:N2} ₽}" FontSize="24" HorizontalAlignment="Center" Margin="8,0" />
+                                            </Grid>
+                                        </Grid>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

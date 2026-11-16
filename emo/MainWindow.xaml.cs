@@ -18,7 +18,6 @@ public partial class MainWindow : Window
     private OrderDraft order = new();
     private int userId, role;
     private bool loadingOrder;
-    private readonly Dictionary<DataGrid, Dictionary<string, string>> columnFilters = new();
     private bool Staff => role is 1 or 2;
     private bool Admin => role == 1;
     private bool Guest => userId == 0;
@@ -126,10 +125,16 @@ public partial class MainWindow : Window
         product = DBHelper.LoadProducts(id).SingleOrDefault()
             ?? throw new InvalidOperationException("Товар уже удалён. Вернитесь кнопкой «Назад» и выберите другую модель.");
         ProductDetails.DataContext = product;
+        var previousSize = (SizeChoice.SelectedItem as ComboBoxItem)?.Value;
         var sizes = DBHelper.LoadSizes(id);
         SizeRange.Text = "Размерный ряд: " + string.Join(", ", sizes.Select(s => s.Size));
-        SizeChoice.ItemsSource = sizes.Where(s => s.MaxCount > 0).ToArray();
-        SizeChoice.SelectedIndex = 0;
+        var available = sizes.Select(s => s with
+        {
+            MaxCount = (int)Math.Max(0L, s.MaxCount - reserved.Where(i => i.StockItemId == s.Value).Sum(i => (long)i.Count))
+        }).ToArray();
+        SizeChoice.ItemsSource = available;
+        SizeChoice.SelectedItem = available.FirstOrDefault(s => s.Value == previousSize)
+            ?? available.FirstOrDefault(s => s.MaxCount > 0) ?? available.FirstOrDefault();
         Quantity.Text = "1";
         AddButton.Content = select == null ? "В корзину" : "Добавить в заказ";
         AddButton.Visibility = Guest ? Visibility.Collapsed : Visibility.Visible;
@@ -140,9 +145,8 @@ public partial class MainWindow : Window
     {
         if (SizeChoice.SelectedItem is not ComboBoxItem size || !int.TryParse(Quantity.Text, out int count) || count <= 0)
             throw new InvalidOperationException("Выберите доступный размер и введите целое положительное количество пар.");
-        var pending = includePending ? reserved.Where(i => i.StockItemId == size.Value).Sum(i => i.Count) : 0;
-        if ((long)count + pending > size.MaxCount)
-            throw new InvalidOperationException($"На складе {size.MaxCount} пар, уже выбрано {pending}. Уменьшите количество или обновите каталог.");
+        if (count > size.MaxCount)
+            throw new InvalidOperationException($"Осталось {size.MaxCount} пар выбранного размера. Уменьшите количество.");
         return new CartItem
         {
             StockItemId = size.Value,
@@ -187,7 +191,6 @@ public partial class MainWindow : Window
         Page(2, "Заказы");
         Orders.ItemsSource = DBHelper.Query(@"SELECT o.id, o.[Дата_заказа], u.[Фамилия], u.[Имя], u.[Отчество]
             FROM Orders_import o JOIN Users u ON o.id_user=u.id ORDER BY o.[Дата_заказа] DESC").DefaultView;
-        ApplyGridFilters(Orders);
     }
 
     private int SelectedOrderId() => Orders.SelectedItem is DataRowView row ? Convert.ToInt32(row["id"])
@@ -292,7 +295,6 @@ public partial class MainWindow : Window
             Items.ItemsSource = table.DefaultView;
             Total.Text = $"Итого: {order.Items.Sum(i => i.Total):N2} ₽";
         }
-        ApplyGridFilters(Items);
         RemoveButton.IsEnabled = ChangeQuantityButton.IsEnabled = Items.SelectedItem != null;
         SaveButton.IsEnabled = order.Id != null || order.Items.Count > 0;
     }
@@ -357,66 +359,15 @@ public partial class MainWindow : Window
         e.Cancel = e.PropertyName is "id" or "id_stock_items" or "Index" or "Скидка";
         if (e.Cancel)
             return;
+        e.Column.SortMemberPath = e.PropertyName;
         e.Column.MinWidth = e.PropertyName == "Наименование" ? 240 : e.PropertyName == "Производство" ? 150 : 100;
-        var grid = (DataGrid)sender;
-        var header = new FrameworkElementFactory(typeof(StackPanel));
-        var label = new FrameworkElementFactory(typeof(TextBlock));
-        label.SetBinding(TextBlock.TextProperty, new Binding());
-        header.AppendChild(label);
-        var filter = new FrameworkElementFactory(typeof(TextBox));
-        filter.SetValue(FrameworkElement.MarginProperty, new Thickness(4));
-        filter.SetValue(FrameworkElement.MinWidthProperty, 70d);
-        filter.SetValue(ToolTipProperty, "Фильтр столбца. Очистите поле, чтобы показать все значения.");
-        filter.SetValue(FrameworkElement.TagProperty, (grid, e.PropertyName));
-        filter.SetValue(TextBox.TextProperty, columnFilters.TryGetValue(grid, out var filters)
-            ? filters.GetValueOrDefault(e.PropertyName, "") : "");
-        filter.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(ColumnFilterChanged));
-        header.AppendChild(filter);
-        e.Column.HeaderTemplate = new DataTemplate { VisualTree = header };
+        e.Column.Width = new DataGridLength(e.PropertyName == "Наименование" ? 3 : e.PropertyName == "Производство" ? 2 : 1, DataGridLengthUnitType.Star);
         if (e.Column is DataGridTextColumn column)
             column.Binding = new Binding(((DataGrid)sender).ItemsSource is DataView ? $"[{e.PropertyName}]" : e.PropertyName)
             {
                 StringFormat = e.PropertyName == "Размер" ? "0.#" : e.PropertyType == typeof(DateTime) ? "dd.MM.yyyy" : e.PropertyType == typeof(decimal) ? "N2" : null,
                 ConverterCulture = System.Globalization.CultureInfo.GetCultureInfo("ru-RU")
             };
-    }
-
-    private void ColumnFilterChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is TextBox { Tag: ValueTuple<DataGrid, string> target } textBox)
-            SetColumnFilter(target.Item1, target.Item2, textBox.Text);
-        e.Handled = true;
-    }
-
-    private void SetColumnFilter(DataGrid grid, string column, string text)
-    {
-        if (!columnFilters.TryGetValue(grid, out var filters))
-            columnFilters[grid] = filters = new();
-        filters[column] = text;
-        ApplyGridFilters(grid);
-    }
-
-    private void ApplyGridFilters(DataGrid grid)
-    {
-        if (grid.ItemsSource is not DataView view || !columnFilters.TryGetValue(grid, out var filters))
-            return;
-        view.Table!.Locale = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
-        view.RowFilter = string.Join(" AND ", filters.Where(f => !string.IsNullOrWhiteSpace(f.Value)
-            && view.Table.Columns.Contains(f.Key)).Select(f =>
-        {
-            if (view.Table.Columns[f.Key]!.DataType == typeof(decimal))
-            {
-                var numberText = string.Concat(f.Value.Where(c => !char.IsWhiteSpace(c)));
-                var culture = System.Globalization.CultureInfo.GetCultureInfo(numberText.Contains('.') && !numberText.Contains(',') ? "en-US" : "ru-RU");
-                if (decimal.TryParse(numberText, System.Globalization.NumberStyles.Number, culture, out var number))
-                    return $"[{f.Key}] = {number.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-            }
-            var literal = string.Concat(f.Value.Trim().Select(c => c switch
-            {
-                '\'' => "''", '[' => "[[]", ']' => "[]]", '%' => "[%]", '*' => "[*]", _ => c.ToString()
-            }));
-            return $"Convert([{f.Key}], 'System.String') LIKE '%{literal}%'";
-        }));
     }
 
     private void Logout(object sender, RoutedEventArgs e)
@@ -463,12 +414,12 @@ public partial class MainWindow : Window
             return;
         var size = SizeChoice.SelectedItem as ComboBoxItem;
         var countValid = int.TryParse(Quantity.Text, out int count) && count > 0;
-        var pending = size == null ? 0 : reserved.Where(i => i.StockItemId == size.Value).Sum(i => (long)i.Count);
-        AddButton.IsEnabled = size != null && countValid;
+        AddButton.IsEnabled = size != null && size.MaxCount > 0 && countValid;
         QuantityHint.Text = size == null ? "Нет доступных размеров. Выберите другую модель."
             : !countValid ? "Введите целое положительное количество пар."
-            : $"Доступно {size.MaxCount} пар; уже выбрано в других позициях: {pending}.";
-        QuantityHint.Foreground = countValid && size != null && count + pending <= size.MaxCount
+            : "";
+        QuantityHint.Visibility = QuantityHint.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        QuantityHint.Foreground = countValid && size != null && count <= size.MaxCount
             ? System.Windows.Media.Brushes.DimGray : System.Windows.Media.Brushes.DarkRed;
     }
 
